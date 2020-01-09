@@ -1,0 +1,20 @@
+参考：https://www.jianshu.com/p/2aa73bf5ce3f
+1、概述
+    1、 RocketMQ 提供有控制台及一系列控制台命令，用于管理员对主题，集群，broker 等信息的管理；
+
+    2、进入 RocketMQ 的bin 目录，可以看到 mqadmin 脚本文件。显示了 mqadmin 命令支持的所有操作。
+        1、配置rocketmq环境变量。
+        2、进入命令矿口，执行mqadmin 可以看到所有命令。
+
+    3、如果想具体查新某一个操作的详细命令，可以使用
+        mqadmin help 命令名称
+        比如：mqadmin help updateTopic
+
+    4、查看 mqadmin脚本
+        可以发现 mqadmin 的命令调用的是 tools 命令，
+        设置的启动类为 org.apache.rocketmq.tools.command.MQAdminStartup 。
+
+    5、参考 updateTopic 命令对应的类 UpdateTopicSubCommand
+
+2、MQAdminStartup 启动类
+    参见，我的源码分析。

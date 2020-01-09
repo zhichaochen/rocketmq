@@ -16,24 +16,47 @@
  */
 package org.apache.rocketmq.remoting.netty;
 
+/**
+ * netty客户端配置
+ */
 public class NettyClientConfig {
     /**
      * Worker thread number
+     * 工作线程
      */
     private int clientWorkerThreads = 4;
+
+    //异步处理线程池线程，等于计算机的核数
     private int clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors();
+
+    //Oneway请求的最大并发数，默认 ：65535
     private int clientOnewaySemaphoreValue = NettySystemConfig.CLIENT_ONEWAY_SEMAPHORE_VALUE;
+
+    //异步请求的最大并发数，默认 ：65535
     private int clientAsyncSemaphoreValue = NettySystemConfig.CLIENT_ASYNC_SEMAPHORE_VALUE;
+
+    //连接超时时长，默认3秒
     private int connectTimeoutMillis = 3000;
+
+    //通道不活跃间隔，默认一分钟
     private long channelNotActiveInterval = 1000 * 60;
 
     /**
      * IdleStateEvent will be triggered when neither read nor write was performed for
      * the specified period of this time. Specify {@code 0} to disable
+     *
+     * 最大空闲时长：默认两分钟
+     * 当超过两分钟后，通过IdleStateHandler发送心跳检测
      */
     private int clientChannelMaxIdleTimeSeconds = 120;
 
+    /**
+     * 发送的最大字节数，默认65535，64kb
+     */
     private int clientSocketSndBufSize = NettySystemConfig.socketSndbufSize;
+    /**
+     * 接收的最大字节数，默认65535，64kb
+     */
     private int clientSocketRcvBufSize = NettySystemConfig.socketRcvbufSize;
     private boolean clientPooledByteBufAllocatorEnable = false;
     private boolean clientCloseSocketIfTimeout = false;

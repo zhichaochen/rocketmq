@@ -23,6 +23,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.rocketmq.common.message.MessageQueue;
 
+/**
+ * 分配消息队列
+ * 目前只有在DefaultLitePullConsumerImpl中用到了
+ */
 public class AssignedMessageQueue {
 
     private final ConcurrentHashMap<MessageQueue, MessageQueueState> assignedMessageQueueState;

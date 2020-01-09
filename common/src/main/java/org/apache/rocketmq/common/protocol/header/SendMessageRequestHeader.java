@@ -25,6 +25,10 @@ import org.apache.rocketmq.remoting.annotation.CFNotNull;
 import org.apache.rocketmq.remoting.annotation.CFNullable;
 import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 
+/**
+ * 版本1（V1）的请求头，版本2 使用单个字符表示。
+ * 参考：SendMessageRequestHeaderV2
+ */
 public class SendMessageRequestHeader implements CommandCustomHeader {
     @CFNotNull
     private String producerGroup;

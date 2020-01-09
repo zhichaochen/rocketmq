@@ -1,0 +1,53 @@
+1、概述
+
+    RocketMQ 的存储机制是【所有的主题消息都存储在 CommitLog 文件中】，也就是【消息发送是完全的顺序 IO】 操作，
+    加上利用内存文件映射机制，极大的提供的 IO 性能。
+
+    【不同主题的消息完全存储在commitLog文件中】，根据主题去查询消息，不得不遍历整个commitLog文件。
+    显然作为一款消息中间件这是绝不允许的。RocketMQ 的ConsumeQueue 文件就是来解决消息消费的。
+
+    首先我们知道，一个主题，在 broker 上可以分成多个消费对列，默认为4个，也就是消费队列是基于主题+broker。
+    那 ConsumeQueue 中当然不会再存储全量消息了，
+    而是存储为定长（20字节，8字节commitlog 偏移量+4字节消息长度+8字节tag hashcode）,消息消费时，
+    首先根据 commitlog offset 去 commitlog 文件组（commitlog每个文件1G，填满了，另外创建一个文件），
+    找到消息的起始位置，然后根据消息长度，读取整条消息。
+
+    但问题又来了，如果我们需要根据消息ID，来查找消息，consumequeue 中没有存储消息ID,
+    如果不采取其他措施，又得遍历 commitlog文件了，为了解决这个问题，rocketmq 的 index 文件又派上了用场。
+
+    根据 commitlog 文件生成 consumequeue、index 文件，主要同运作于两种情况：
+
+    1、运行中，发送端发送消息到 commitlog文件，此时如何及时传达到 consume文件、Index文件呢？
+
+    2、broker 启动时，检测 commitlog 文件与 consumequeue、index 文件中信息是否一致，如果不一致，需要根据 commitlog 文件重新恢复 consumequeue 文件和 index 文件。
+
+
+
+
+
+
+
+2、commitlog、consumequeue、index 文件同步问题     
+    RocketMQ 采用专门的线程来根据 comitlog offset 来将 commitlog 转发给ConsumeQueue、Index。
+    其线程为DefaultMessageStore$ReputMessageService
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

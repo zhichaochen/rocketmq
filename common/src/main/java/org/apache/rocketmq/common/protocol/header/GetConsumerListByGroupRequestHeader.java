@@ -21,9 +21,13 @@ import org.apache.rocketmq.remoting.CommandCustomHeader;
 import org.apache.rocketmq.remoting.annotation.CFNotNull;
 import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 
+/**
+ * 获取【消费者列表】的请求头。
+ * 只有一个参数，consumerGroup
+ */
 public class GetConsumerListByGroupRequestHeader implements CommandCustomHeader {
     @CFNotNull
-    private String consumerGroup;
+    private String consumerGroup;//消费者组
 
     @Override
     public void checkFields() throws RemotingCommandException {

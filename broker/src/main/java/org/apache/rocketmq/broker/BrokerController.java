@@ -107,6 +107,9 @@ import org.apache.rocketmq.store.dledger.DLedgerCommitLog;
 import org.apache.rocketmq.store.stats.BrokerStats;
 import org.apache.rocketmq.store.stats.BrokerStatsManager;
 
+/**
+ * 主要是负责启动Broker
+ */
 public class BrokerController {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     private static final InternalLogger LOG_PROTECTION = InternalLoggerFactory.getLogger(LoggerName.PROTECTION_LOGGER_NAME);
@@ -162,9 +165,16 @@ public class BrokerController {
     private BrokerFastFailure brokerFastFailure;
     private Configuration configuration;
     private FileWatchService fileWatchService;
+    /**
+     * 事务相关
+     * transactionalMessageCheckService ：事务消息状态回查
+     * TransactionalMessageService ：事务消息接口
+     * AbstractTransactionalMessageCheckListener ：事务消息状态回查监听器
+     */
     private TransactionalMessageCheckService transactionalMessageCheckService;
     private TransactionalMessageService transactionalMessageService;
     private AbstractTransactionalMessageCheckListener transactionalMessageCheckListener;
+
     private Future<?> slaveSyncFuture;
     private Map<Class,AccessValidator> accessValidatorMap = new HashMap<Class, AccessValidator>();
 
@@ -231,7 +241,14 @@ public class BrokerController {
         return queryThreadPoolQueue;
     }
 
+    /**
+     * 初始化并启动Broker
+     *
+     * @return
+     * @throws CloneNotSupportedException
+     */
     public boolean initialize() throws CloneNotSupportedException {
+        //从持久化文件中加载数据到内存中
         boolean result = this.topicConfigManager.load();
 
         result = result && this.consumerOffsetManager.load();
@@ -257,7 +274,9 @@ public class BrokerController {
                 log.error("Failed to initialize", e);
             }
         }
-
+        /**
+         * 加载消息文件，和消费队列文件
+         */
         result = result && this.messageStore.load();
 
         if (result) {
@@ -479,6 +498,7 @@ public class BrokerController {
                     log.warn("FileWatchService created error, can't load the certificate dynamically");
                 }
             }
+            //初始化事务
             initialTransaction();
             initialAcl();
             initialRpcHooks();
@@ -486,6 +506,9 @@ public class BrokerController {
         return result;
     }
 
+    /**
+     * 初始化事务相关
+     */
     private void initialTransaction() {
         this.transactionalMessageService = ServiceProvider.loadClass(ServiceProvider.TRANSACTION_SERVICE_ID, TransactionalMessageService.class);
         if (null == this.transactionalMessageService) {
@@ -498,6 +521,9 @@ public class BrokerController {
             log.warn("Load default discard message hook service: {}", DefaultTransactionalMessageCheckListener.class.getSimpleName());
         }
         this.transactionalMessageCheckListener.setBrokerController(this);
+        /**
+         * 创建事务状态回查线程，
+         */
         this.transactionalMessageCheckService = new TransactionalMessageCheckService(this);
     }
 
@@ -910,17 +936,31 @@ public class BrokerController {
 
     }
 
+    /**
+     *
+     * @param topicConfig
+     * @param dataVersion
+     */
     public synchronized void registerIncrementBrokerData(TopicConfig topicConfig, DataVersion dataVersion) {
         TopicConfig registerTopicConfig = topicConfig;
+
+        /**
+         * 如果不可读，或者不可写，创建新的TopicConfig
+         */
         if (!PermName.isWriteable(this.getBrokerConfig().getBrokerPermission())
             || !PermName.isReadable(this.getBrokerConfig().getBrokerPermission())) {
             registerTopicConfig =
                 new TopicConfig(topicConfig.getTopicName(), topicConfig.getReadQueueNums(), topicConfig.getWriteQueueNums(),
                     this.brokerConfig.getBrokerPermission());
         }
-
+        /**
+         * 创建topicConfigTable，并缓存topic配置
+         */
         ConcurrentMap<String, TopicConfig> topicConfigTable = new ConcurrentHashMap<String, TopicConfig>();
         topicConfigTable.put(topicConfig.getTopicName(), registerTopicConfig);
+        /**
+         *
+         */
         TopicConfigSerializeWrapper topicConfigSerializeWrapper = new TopicConfigSerializeWrapper();
         topicConfigSerializeWrapper.setDataVersion(dataVersion);
         topicConfigSerializeWrapper.setTopicConfigTable(topicConfigTable);
@@ -952,6 +992,13 @@ public class BrokerController {
         }
     }
 
+    /**
+     * 注册所有的broker
+     *
+     * @param checkOrderConfig
+     * @param oneway
+     * @param topicConfigWrapper
+     */
     private void doRegisterBrokerAll(boolean checkOrderConfig, boolean oneway,
         TopicConfigSerializeWrapper topicConfigWrapper) {
         List<RegisterBrokerResult> registerBrokerResultList = this.brokerOuterAPI.registerBrokerAll(

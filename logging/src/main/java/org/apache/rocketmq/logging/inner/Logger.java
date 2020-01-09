@@ -21,7 +21,9 @@ import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.Vector;
 
-
+/**
+ * 自定义的logger
+ */
 public class Logger implements Appender.AppenderPipeline {
 
     private static final String FQCN = Logger.class.getName();

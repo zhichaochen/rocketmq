@@ -1,0 +1,82 @@
+参考：https://www.jianshu.com/p/03f5288288fa
+
+1、Broker#MessageStore
+    Broker将消息存储抽象成MessageStore接口，默认实现类是DefaultMessageStore。主要提供如下方法：
+
+    保存消息，包括单条和批量保存
+    根据topic、queue和offset批量获取消息，consumer使用该方法来拉取消息
+    根据消息offset读取消息详情，根据messageId查询消息时使用该方法
+    根据messageKey查询消息，可提供给终端用户使用
+    下面我们根据一个MessageStore的数据结构图来看下消息是如何存储的
+
+
+    CommitLog : MappedFileQueue : MappedFile = 1 : 1 : N。
+
+
+2、数据结构
+    CommitLog，
+        存储消息的详细内容，按照消息收到的顺序，所有消息都存储在一起。
+        每个消息存储后都会有一个offset，代表在commitLog中的偏移量。
+
+        举个例子，当前commitLog文件的大小是12413435字节，那下一条消息到来后它的offset就是12413436。
+        这个说法不是非常准确，但是offset大概是这么计算来的。
+
+        commitLog并不是一个文件，而是一系列文件（上图中的MappedFile）。
+        每个文件的大小都是固定的（默认1G），写满一个会生成一个新的文件，新文件的文件名就是它存储的第一条消息的offset。
+
+
+    ConsumeQueue，
+        既然所有消息都是存储在一个commitLog中，但是consumer是按照topic+queue的维度来消费消息的，
+        没有办法直接从commitLog中读取，所以针对每个topic的每个queue都会生成consumeQueue文件。
+
+        ConsumeQueue文件中存储的是【消息在commitLog中的offset】，
+
+        可以理解成一个按queue建的索引，每条消息占用20字节（上图中的一个cq）。
+        跟commitLog一样，每个Queue文件也是一系列连续的文件组成，每个文件默认放30w个offset。
+
+    IndexFile
+        CommitLog的另外一种形式的索引文件，只是索引的是messageKey，
+        每个MsgKey经过hash后计算存储的slot，然后将offset存到IndexFile的相应slot上。
+        根据msgKey来查询消息时，可以先到IndexFile中查询offset，然后根据offset去commitLog中查询消息详情。
+
+
+3、线程服务
+    MessageStore除了上面的数据结构以外，还需要相应的服务来对数据做操作。
+
+    IndexService，
+        负责读写IndexFile的服务
+    ReputMessageService，
+        消息存储到commitLog后，MessageStore的接口调用就直接返回了，
+        后续由ReputMessageService负责将消息分发到ConsumeQueue和IndexService
+
+    HAService，
+        负责将master-slave之间的消息数据同步
+
+    以上就是MessageStore的整体结构了，下面看下它的启动过程。
+
+
+4、message在CommitLog中的存储结构
+    第几位	字段	                        说明	                    数据类型	            字节数
+    1	    MsgLen	                        消息总长度	                Int	                4
+    2	    MagicCode	                    MESSAGE_MAGIC_CODE	        Int                 4
+    3	    BodyCRC	                        消息内容CRC	                Int	                4
+    4	    QueueId	                        消息队列编号	                Int	                4
+    5	    Flag	                        flag	                    Int	                4
+    6	    QueueOffset	                    消息队列位置	                Long	            8
+    7	    PhysicalOffset	       物理位置。在 CommitLog 的顺序存储位置。	Long	            8
+    8	    SysFlag	                        MessageSysFlag	            Int	                4
+    9	    BornTimestamp	                生成消息时间戳	            Long	            8
+    10	    BornHost	                    生效消息的地址+端口	        Long	            8
+    11	    StoreTimestamp	                存储消息时间戳	            Long	            8
+    12	    StoreHost	                    存储消息的地址+端口	        Long	            8
+    13	    ReconsumeTimes	                重新消费消息次数	            Int	                4
+    14	    PreparedTransationOffset		                            Long	            8
+    15	    BodyLength + Body	            内容长度 + 内容	            Int + Bytes	        4 + bodyLength
+    16	    TopicLength + Topic	            Topic长度 + Topic	        Byte + Bytes	    1 + topicLength
+    17	    PropertiesLength + Properties	拓展字段长度 + 拓展字段	    Short + Bytes	    2 + PropertiesLength
+
+BLANK 在 CommitLog 存储结构：
+
+第几位	字段	说明	数据类型	字节数
+1	maxBlank	空白长度	Int	4
+2	MagicCode	BLANK_MAGIC_CODE	Int	4

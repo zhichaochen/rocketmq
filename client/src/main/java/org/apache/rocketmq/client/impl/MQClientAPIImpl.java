@@ -164,6 +164,13 @@ import org.apache.rocketmq.remoting.protocol.LanguageCode;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
+/**
+ * Client API
+ *
+ * 提供一些api方法，方便其他地方使用，
+ *
+ * 例如：各种远程调用
+ */
 public class MQClientAPIImpl {
 
     private final static InternalLogger log = ClientLogger.getLog();
@@ -186,9 +193,12 @@ public class MQClientAPIImpl {
         this.clientConfig = clientConfig;
         topAddressing = new TopAddressing(MixAll.getWSAddr(), clientConfig.getUnitName());
         this.remotingClient = new NettyRemotingClient(nettyClientConfig, null);
+        //创建远程服务的客户端
         this.clientRemotingProcessor = clientRemotingProcessor;
 
         this.remotingClient.registerRPCHook(rpcHook);
+
+        //事务状态处理器
         this.remotingClient.registerProcessor(RequestCode.CHECK_TRANSACTION_STATE, this.clientRemotingProcessor, null);
 
         this.remotingClient.registerProcessor(RequestCode.NOTIFY_CONSUMER_IDS_CHANGED, this.clientRemotingProcessor, null);
@@ -212,6 +222,10 @@ public class MQClientAPIImpl {
         return remotingClient;
     }
 
+    /**
+     *
+     * @return
+     */
     public String fetchNameServerAddr() {
         try {
             String addrs = this.topAddressing.fetchNSAddr();
@@ -266,21 +280,35 @@ public class MQClientAPIImpl {
 
     }
 
+    /**
+     *  创建topic
+     */
     public void createTopic(final String addr, final String defaultTopic, final TopicConfig topicConfig,
         final long timeoutMillis)
         throws RemotingException, MQBrokerException, InterruptedException, MQClientException {
+        /**
+         * 创建topic请求头
+         */
         CreateTopicRequestHeader requestHeader = new CreateTopicRequestHeader();
         requestHeader.setTopic(topicConfig.getTopicName());
         requestHeader.setDefaultTopic(defaultTopic);
         requestHeader.setReadQueueNums(topicConfig.getReadQueueNums());
         requestHeader.setWriteQueueNums(topicConfig.getWriteQueueNums());
+        //设置权限
         requestHeader.setPerm(topicConfig.getPerm());
+        //topic过滤类型。单个tag，还是多个tag。
         requestHeader.setTopicFilterType(topicConfig.getTopicFilterType().name());
         requestHeader.setTopicSysFlag(topicConfig.getTopicSysFlag());
         requestHeader.setOrder(topicConfig.isOrder());
-
+        /**
+         * 创建请求命令。
+         */
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.UPDATE_AND_CREATE_TOPIC, requestHeader);
-
+        /**
+         * 发送VIP请求。
+         *
+         * vip使用 另一个端口，默认的端口号 -2
+         */
         RemotingCommand response = this.remotingClient.invokeSync(MixAll.brokerVIPChannel(this.clientConfig.isVipChannelEnabled(), addr),
             request, timeoutMillis);
         assert response != null;
@@ -418,14 +446,25 @@ public class MQClientAPIImpl {
 
     }
 
+    /**
+     * 发送消息
+     */
     public SendResult sendMessage(
+        //目标地址
         final String addr,
+        //目标broker
         final String brokerName,
+        //消息
         final Message msg,
+        //消息请求头。
         final SendMessageRequestHeader requestHeader,
+        //超时时长
         final long timeoutMillis,
+        //连接方式，同步还是异步
         final CommunicationMode communicationMode,
+        //消息上下文
         final SendMessageContext context,
+        //消息生产者
         final DefaultMQProducerImpl producer
     ) throws RemotingException, MQBrokerException, InterruptedException {
         return sendMessage(addr, brokerName, msg, requestHeader, timeoutMillis, communicationMode, null, null, null, 0, context, producer);
@@ -438,7 +477,9 @@ public class MQClientAPIImpl {
         final SendMessageRequestHeader requestHeader,
         final long timeoutMillis,
         final CommunicationMode communicationMode,
+        //发送回调
         final SendCallback sendCallback,
+        //topic 信息
         final TopicPublishInfo topicPublishInfo,
         final MQClientInstance instance,
         final int retryTimesWhenSendFailed,
@@ -446,9 +487,13 @@ public class MQClientAPIImpl {
         final DefaultMQProducerImpl producer
     ) throws RemotingException, MQBrokerException, InterruptedException {
         long beginStartTime = System.currentTimeMillis();
+        //远程命令
         RemotingCommand request = null;
         String msgType = msg.getProperty(MessageConst.PROPERTY_MESSAGE_TYPE);
         boolean isReply = msgType != null && msgType.equals(MixAll.REPLY_MESSAGE_FLAG);
+        /**
+         * 创建请求命令
+         */
         if (isReply) {
             if (sendSmartMsg) {
                 SendMessageRequestHeaderV2 requestHeaderV2 = SendMessageRequestHeaderV2.createSendMessageRequestHeaderV2(requestHeader);
@@ -464,8 +509,13 @@ public class MQClientAPIImpl {
                 request = RemotingCommand.createRequestCommand(RequestCode.SEND_MESSAGE, requestHeader);
             }
         }
+        /**
+         * 设置请求体
+         */
         request.setBody(msg.getBody());
-
+        /**
+         * 发送请求。
+         */
         switch (communicationMode) {
             case ONEWAY:
                 this.remotingClient.invokeOneway(addr, request, timeoutMillis);
@@ -709,6 +759,14 @@ public class MQClientAPIImpl {
         throw new MQBrokerException(response.getCode(), response.getRemark());
     }
 
+    /**
+     * 发送RPC请求，拉取消息。
+     *
+     * @return
+     * @throws RemotingException
+     * @throws MQBrokerException
+     * @throws InterruptedException
+     */
     public PullResult pullMessage(
         final String addr,
         final PullMessageRequestHeader requestHeader,
@@ -880,6 +938,9 @@ public class MQClientAPIImpl {
         throw new MQBrokerException(response.getCode(), response.getRemark());
     }
 
+    /**
+     * 去broker查询消费者Id列表
+     */
     public List<String> getConsumerIdListByGroup(
         final String addr,
         final String consumerGroup,
@@ -1012,6 +1073,9 @@ public class MQClientAPIImpl {
         this.remotingClient.invokeOneway(MixAll.brokerVIPChannel(this.clientConfig.isVipChannelEnabled(), addr), request, timeoutMillis);
     }
 
+    /**
+     * 向broker发送心跳
+     */
     public int sendHearbeat(
         final String addr,
         final HeartbeatData heartbeatData,
@@ -1359,6 +1423,9 @@ public class MQClientAPIImpl {
         return getTopicRouteInfoFromNameServer(topic, timeoutMillis, true);
     }
 
+    /**
+     * 创建命令，同步请求nameServer
+     */
     public TopicRouteData getTopicRouteInfoFromNameServer(final String topic, final long timeoutMillis,
         boolean allowTopicNotExist) throws MQClientException, InterruptedException, RemotingTimeoutException, RemotingSendRequestException, RemotingConnectException {
         GetRouteInfoRequestHeader requestHeader = new GetRouteInfoRequestHeader();
@@ -1376,6 +1443,9 @@ public class MQClientAPIImpl {
 
                 break;
             }
+            /**
+             * 解码路由数据
+             */
             case ResponseCode.SUCCESS: {
                 byte[] body = response.getBody();
                 if (body != null) {

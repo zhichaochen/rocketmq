@@ -80,7 +80,11 @@ import org.apache.rocketmq.tools.command.topic.UpdateTopicPermSubCommand;
 import org.apache.rocketmq.tools.command.topic.UpdateTopicSubCommand;
 import org.slf4j.LoggerFactory;
 
+/**
+ * 启动命令服务
+ */
 public class MQAdminStartup {
+    //命令缓存
     protected static List<SubCommand> subCommandList = new ArrayList<SubCommand>();
 
     private static String rocketmqHome = System.getProperty(MixAll.ROCKETMQ_HOME_PROPERTY,
@@ -91,20 +95,33 @@ public class MQAdminStartup {
     }
 
     public static void main0(String[] args, RPCHook rpcHook) {
+        //设置当前版本
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
 
         //PackageConflictDetect.detectFastjson();
 
+        //初始化命令，并加入缓存。
         initCommand();
 
         try {
             initLogback();
             switch (args.length) {
+                /**
+                 * 执行mqadmin 命令
+                 *
+                 * 比如输入命令：mqadmin，打印所有命令
+                 */
                 case 0:
                     printHelp();
                     break;
+                /**
+                 * 执行help 命令。
+                 * 例如命令：mqadmin help updateTopic
+                 * 查找命令，并打印处该命令的所有option 及描述。
+                 */
                 case 2:
                     if (args[0].equals("help")) {
+                        //查找某个命令
                         SubCommand cmd = findSubCommand(args[1]);
                         if (cmd != null) {
                             Options options = ServerUtil.buildCommandlineOptions(new Options());
@@ -117,7 +134,14 @@ public class MQAdminStartup {
                         }
                         break;
                     }
+
                 case 1:
+                    /**
+                     * 执行命令。
+                     *
+                     * 例如：mqadmin updateTopic。执行更新topic的操作。
+                     *
+                     */
                 default:
                     SubCommand cmd = findSubCommand(args[0]);
                     if (cmd != null) {
@@ -147,6 +171,9 @@ public class MQAdminStartup {
         }
     }
 
+    /**
+     * 初始化各个命令
+     */
     public static void initCommand() {
         initCommand(new UpdateTopicSubCommand());
         initCommand(new DeleteTopicSubCommand());
@@ -221,8 +248,14 @@ public class MQAdminStartup {
         configurator.doConfigure(rocketmqHome + "/conf/logback_tools.xml");
     }
 
+    /**
+     * 打印命令
+     */
     private static void printHelp() {
         System.out.printf("The most commonly used mqadmin commands are:%n");
+        /**
+         * 循环所有命令并打印，例如：updateTopic          Update or create topic
+         */
         for (SubCommand cmd : subCommandList) {
             System.out.printf("   %-20s %s%n", cmd.commandName(), cmd.commandDesc());
         }
@@ -230,6 +263,12 @@ public class MQAdminStartup {
         System.out.printf("%nSee 'mqadmin help <command>' for more information on a specific command.%n");
     }
 
+    /**
+     * 通过命令名称，查找命令。
+     *
+     * @param name
+     * @return
+     */
     private static SubCommand findSubCommand(final String name) {
         for (SubCommand cmd : subCommandList) {
             if (cmd.commandName().toUpperCase().equals(name.toUpperCase())) {
@@ -251,6 +290,10 @@ public class MQAdminStartup {
         return null;
     }
 
+    /**
+     * 将命令加入缓存。
+     * @param command
+     */
     public static void initCommand(SubCommand command) {
         subCommandList.add(command);
     }

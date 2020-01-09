@@ -1,0 +1,94 @@
+1、概述
+    Comitlog#putMessage 首先将消息写入到 MappedFile,内存映射文件。
+    然后根据刷盘策略刷写到磁盘。
+
+2、入口
+    CommitLog#handleDiskFlush
+
+
+
+
+
+
+
+4、FlushCommitLogService
+    所有刷盘线程的父类。
+
+5、同步刷盘（GroupCommitService）
+    1、总结：
+        1、GroupCommitService线程 每10毫秒处理一批同步刷盘的请求。
+
+            【这样是按批次进行处理，不用每个生产请求，都进行一次刷盘，提升效率。
+            这样处理，就演变成了，每10ms执行一次刷盘，一次刷盘包含多条消息数据。】
+
+            以上说法不对，看源码发现即使是10ms刷盘一次，也是一条一条的进行刷盘。
+
+
+
+    1、同步刷盘的流程
+        1、一个生产线程过来，如果是同步刷盘的话，
+            1、创建一个GroupCommitRequest，表示一个同步刷盘请求。
+            2、将GroupCommitRequest对象加入GroupCommitService线程的缓存中。
+            3、使用CountdownLatch#wait,阻塞当前线程。直到刷盘完成。
+
+        2、同步线程GroupCommitService，每10ms，处理一批同步刷盘请求。
+            步骤1中，加入了请求，那么接下来就会处理的。
+
+            处理在10ms之内积累的所有刷盘请求。遍历，一条一条地执行刷盘操作。
+
+        3、每刷盘完毕一条，通知阻塞的线程，继续。
+
+
+    2、GroupCommitRequest
+        表示一个同步刷盘的请求。也表示一个生产者。（同时也表示一个生产者的线程）
+        使用该对象，控制生产线程的同步。
+        在其内部
+
+
+    3、在刷盘的时候，为啥循环两次呢？？
+        for (int i = 0; i < 2 && !flushOK; i++) {
+            //false，因为还没有刷盘
+            flushOK = CommitLog.this.mappedFileQueue.getFlushedWhere() >= req.getNextOffset();
+
+            if (!flushOK) {
+                //执行刷盘操作
+                CommitLog.this.mappedFileQueue.flush(0);
+            }
+        }
+
+        当一个消息文件快到文件末尾的时候，有可能当前文件存储不下这批消息，需要存储到另一个文件一部分消息。
+        这样的话，需要对这两个文件进行刷盘刷盘。
+
+        CommitLog.this.mappedFileQueue.flush(0);
+        也就是说：mappedFileQueue这个对象，循环两次的时候，有可能操作的是不同的文件。
+
+    4、怎么理解 nextOffset，这个变量呢？？
+        同步刷盘的时候，根本就不用调用 write()方法。直接调用flush就可以了。
+
+        所以，在刷盘入口，CommitLog#handleDiskFlush这里，即使是异步刷盘，也没有调用write方法呢。
+
+        nextOffset = wroteOffset(已经写入磁盘的offset) + wroteBytes(这次发送的消息的size)
+
+
+6、异步刷盘（FlushRealTimeService ）
+    每隔 500ms刷盘一次。
+
+    刷盘的时候需要传入最少刷盘页，一页1024 * 4(4kb),
+        同步刷盘的时候，传入该值为0，也就是每次都刷。
+        异步刷盘的时候，需要判断一下，小于最少刷盘页，则不进行刷盘。
+
+
+    同步刷盘异步刷盘的区别
+        同步刷盘必须等到刷盘成功才算成功。
+        异步刷盘：当前线程继续执行，开启一个线程执行刷盘操作。
+
+7、外内存线程类，CommitRealTimeService
+    与异步刷盘（FlushRealTimeService）不同的是，调用的方法不一样
+
+    FlushRealTimeService 调用mappedFileQueue.flush，而CommitRealTimeService调用commit方法。
+
+    commit的本质是将消息内容，调用FileChannel.write(),然后通知FlushRealTimeService进行刷盘。
+
+
+
+

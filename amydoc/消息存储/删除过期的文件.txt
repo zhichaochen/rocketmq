@@ -1,0 +1,21 @@
+总结：
+    文件保存时间：默认保存72个小时
+
+1、DefaultMessageStore#start
+    启动存储服务
+2、DefaultMessageStore#addScheduleTask
+    启动周期性任务
+3、DefaultMessageStore#cleanFilesPeriodically
+    执行两个任务
+    1、删除过期的消息文件
+    2、删除过期的消费队列文件
+
+    this.cleanCommitLogService.run();
+    this.cleanConsumeQueueService.run();
+
+4、DefaultMessageStore  中 CleanCommitLogService#run
+    也有两个方法
+        this.deleteExpiredFiles();
+        this.redeleteHangedFile();
+
+5、deleteExpiredFiles

@@ -45,13 +45,42 @@ import org.apache.rocketmq.common.protocol.route.TopicRouteData;
 import org.apache.rocketmq.common.sysflag.TopicSysFlag;
 import org.apache.rocketmq.remoting.common.RemotingUtil;
 
+/**
+ * NameServer 数据的载体，记录 Broker、Topic 等信息。
+ */
 public class RouteInfoManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
+    /**
+     * NameServer 与 Broker 空闲时长，默认2分钟，在2分钟内 Nameserver 没有收到 Broker 的心跳包，则关闭该连接。
+     */
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
+    /**
+     * 读写锁，用来保护非线程安全容器 HashMap。
+     */
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    /**
+     * 主题与队列关系，
+     * 记录一个主题的队列信息。
+     */
     private final HashMap<String/* topic */, List<QueueData>> topicQueueTable;
+    /**
+     * 所有 Broker 信息
+     * 使用 brokerName 当key, BrokerData 信息描述每一个 broker 信息。
+     */
     private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable;
+    /**
+     * broker 集群信息，每个集群包含哪些 Broker。
+     * 其中：key：及群名，value：broker集合。
+     */
     private final HashMap<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
+    /**
+     * 当前存活的 Broker
+     *
+     * 该信息不是实时的，NameServer 每10S扫描一次所有的 broker,根据心跳包的时间得知 broker的状态，
+     * 该机制也是导致当一个 Broker 进程假死后，消息生产者无法立即感知，可能继续向其发送消息，
+     * 导致失败（非高可用），如何保证消息发送高可用，请关关注该系列后续文章。
+     *
+     */
     private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
     private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
 
@@ -99,6 +128,19 @@ public class RouteInfoManager {
         return topicList.encode();
     }
 
+    /**
+     * 注册broker
+     *
+     * @param clusterName：集群名
+     * @param brokerAddr ：broker地址
+     * @param brokerName ：broker名称
+     * @param brokerId ： brokerId
+     * @param haServerAddr ：broker的跟随者地址
+     * @param topicConfigWrapper ：topic配置
+     * @param filterServerList ：
+     * @param channel
+     * @return
+     */
     public RegisterBrokerResult registerBroker(
         final String clusterName,
         final String brokerAddr,
@@ -108,11 +150,16 @@ public class RouteInfoManager {
         final TopicConfigSerializeWrapper topicConfigWrapper,
         final List<String> filterServerList,
         final Channel channel) {
+        //创建注册broker结果
         RegisterBrokerResult result = new RegisterBrokerResult();
         try {
             try {
+                /**
+                 * 可能有多个broker同时注册，这里开启写锁
+                 */
                 this.lock.writeLock().lockInterruptibly();
 
+                //获取某个集群下的所有broker name
                 Set<String> brokerNames = this.clusterAddrTable.get(clusterName);
                 if (null == brokerNames) {
                     brokerNames = new HashSet<String>();
@@ -122,6 +169,9 @@ public class RouteInfoManager {
 
                 boolean registerFirst = false;
 
+                /**
+                 * 更新broker数据
+                 */
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
                 if (null == brokerData) {
                     registerFirst = true;
@@ -142,6 +192,9 @@ public class RouteInfoManager {
                 String oldAddr = brokerData.getBrokerAddrs().put(brokerId, brokerAddr);
                 registerFirst = registerFirst || (null == oldAddr);
 
+                /**
+                 * 如果topic数据不为空的话，更新topic数据。
+                 */
                 if (null != topicConfigWrapper
                     && MixAll.MASTER_ID == brokerId) {
                     if (this.isBrokerTopicConfigChanged(brokerAddr, topicConfigWrapper.getDataVersion())
@@ -214,6 +267,12 @@ public class RouteInfoManager {
         }
     }
 
+    /**
+     * 更新主题的队列数据。
+     *
+     * @param brokerName
+     * @param topicConfig
+     */
     private void createAndUpdateQueueData(final String brokerName, final TopicConfig topicConfig) {
         QueueData queueData = new QueueData();
         queueData.setBrokerName(brokerName);
@@ -426,6 +485,11 @@ public class RouteInfoManager {
         return null;
     }
 
+    /**
+     * 扫描不活跃的Broker
+     * 空闲时长超过两分钟，则关闭channel
+     *
+     */
     public void scanNotActiveBroker() {
         Iterator<Entry<String, BrokerLiveInfo>> it = this.brokerLiveTable.entrySet().iterator();
         while (it.hasNext()) {

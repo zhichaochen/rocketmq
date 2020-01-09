@@ -34,6 +34,9 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.remoting.common.RemotingHelper;
 import org.apache.rocketmq.remoting.common.RemotingUtil;
 
+/**
+ * 生产者管理器
+ */
 public class ProducerManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     private static final long LOCK_TIMEOUT_MILLIS = 3000;
@@ -206,6 +209,7 @@ public class ProducerManager {
     }
 
     public Channel getAvaliableChannel(String groupId) {
+
         HashMap<Channel, ClientChannelInfo> channelClientChannelInfoHashMap = groupChannelTable.get(groupId);
         List<Channel> channelList = new ArrayList<Channel>();
         if (channelClientChannelInfoHashMap != null) {

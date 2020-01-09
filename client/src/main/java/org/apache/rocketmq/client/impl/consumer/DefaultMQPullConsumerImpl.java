@@ -69,6 +69,8 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
 /**
  * This class will be removed in 2022, and a better implementation {@link DefaultLitePullConsumerImpl} is recommend to use
  * in the scenario of actively pulling messages.
+ *
+ * 不推荐使用了
  */
 @Deprecated
 public class DefaultMQPullConsumerImpl implements MQConsumerInner {

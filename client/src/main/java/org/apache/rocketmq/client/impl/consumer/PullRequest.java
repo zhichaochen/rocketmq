@@ -18,10 +18,18 @@ package org.apache.rocketmq.client.impl.consumer;
 
 import org.apache.rocketmq.common.message.MessageQueue;
 
+/**
+ * 拉取消息请求
+ * PullRequest与MessageQueue 是 1 对 1的关系。
+ */
 public class PullRequest {
+    //消费组
     private String consumerGroup;
+    //消费队列
     private MessageQueue messageQueue;
+    //消息处理对列
     private ProcessQueue processQueue;
+    //要拉取的offset
     private long nextOffset;
     private boolean lockedFirst = false;
 

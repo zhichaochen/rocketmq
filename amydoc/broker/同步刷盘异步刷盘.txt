@@ -1,0 +1,61 @@
+参考：https://www.jianshu.com/p/62f876fda84c
+参考：https://www.jianshu.com/p/ac3508ddde7b
+
+1.同步刷盘方式：消息写入磁盘后再返回成功状态。
+2.异步刷盘方式：消息写入内存后就返回成功状态。
+
+两种复制方式，表示消息从Master复制到Slave的方式，brokerRole，ASYNC_MASTER（异步master），SYNC_MASTER（同步master），SLAVE（slave）。
+1.同步复制方式：等Master和Slave都写入成功后才返回写入成功。
+2.异步复制方式：Master写入成功后就返回写入成功。
+
+三种消费方式 ：
+1.Push（服务端主动推送消息），RocketMQ服务器收到消息后自动调用消费者函数来处理消息，自动维护Offset。支持两种消息模式，Clustering模式，同一个ConsumerGroup的每个Consumer消费订阅消息的一部分内容，broadcasting模式，同一个ConsumerGroup的每个Consumer都消费所订阅的的全部消息。
+2.Pull （客户端主动拉取消息），Client端循环从Server端拉取消息。需要客户端自己维护Offset。
+3.长轮询消费方式，Client发送消息请求，Server端接受请求，如果发现Server队列里没有新消息，Server端不立即返回，而是持有这个请求一段时间（通过设置超时时间来实现），在这段时间内轮询Server队列内是否有新的消息，如果有新消息，就利用现有的连接返回消息给消费者；如果这段时间内没有新消息进入队列，则返回空。
+
+深入了解了上面三个角色，我们来总结下双master，双slave模式下的整个发送，消费流程。生产者发送消息，消息会负载均衡到两个Master上，如果master的刷盘方式是同步刷盘方式，复制方式是同步复制方式，需要消息写到master和slave的硬盘上后，服务器才会放回发送消息成功。消息存储到服务器后，消费者根据自己的消费方式来消费消息，如果是Push，消息到达服务器后马上推送消息到消费者，如果是pull，消费拉取消息后再消费。
+
+roker分为Master与Slave（Slave不可写，但可读，类似于MySQL的主备方式），一个Master可以对应多个Slave，但是一个Slave只能对应一个Master，Master与Slave的对应关系通过指定相同的BrokerName，不同的BrokerId来定义，BrokerId为0表示Master，非0表示Slave。Master也可以部署多个。每个Broker与NameServer集群中的所有节点建立长连接，定时注册Topic信息到所有 NameServer。
+1）单个master：这是一种风险比较大的集群方式，因为一旦Borker重启或宕机期间，将会导致这个服务不可用，因此是不建议线上环境去使用的。
+2）多个master：一个集群全部都是Master，没有Slave。
+　　优点：配置简单，单个Master宕机或者是重启维护对应用没有什么影响的，在磁盘配置为RAID10时，即使机器宕机不可恢复的情况下，消息也不会丢失（异步刷盘丢失少量消息，同步刷盘则是一条都不会丢失），性能最高
+
+　　缺点：当单个Broker宕机期间，这台机器上未被消费的消息在机器恢复之前不可订阅，消息的实时性会受到影响
+
+3）多master多salve异步复制，每个Master配置一个Slave,有多对的Master-Slave，HA采用的是异步复制方式，主备有短暂的消息延迟，毫秒级别的（Master收到消息之后立刻向应用返回成功标识，同时向Slave写入消息）。
+　　优点：即使是磁盘损坏了，消息丢失的非常少，且消息实时性不会受到影响，因为Master宕机之后，消费者仍然可以从Slave消费，此过程对应用透明，不需要人工干预，性能同多个Master模式机会一样。
+
+　　缺点：Master宕机，磁盘损坏的情况下，会丢失少量的消息
+
+4）多master多salve同步双写，每个Master配置一个Slave,有多对的Master-Slave，HA采用的是同步双写模式，主备都写成功，才会向应用返回成功。
+　　优点：数据与服务都无单点，Master宕机的情况下，消息无延迟，服务可用性与数据可用性都非常高
+
+　　缺点：性能比异步复制模式略低，大约低10%左右，发送单个Master的RT会略高，目前主机宕机后，Slave不能自动切换为主机，后续会支持自动切换功能。
+
+Producer与NameServer集群中的其中一个节点（随机选择）建立长连接，定期从Name Server取Topic路由信息，并向提供Topic服务的Master建立长连接，且定时向Master发送心跳。Producer完全无状态，可集群部署。
+Consumer与NameServer集群中的其中一个节点（随机选择）建立长连接，定期从Name Server取Topic路由信息，并向提供Topic服务的Master、Slave建立长连接，且定时向Master、Slave发送心跳。Consumer既可以从Master订阅消息，也可以从Slave订阅消息，订阅规则由Broker配置决定。
+
+
+
+
+一、问题思考
+二、Broker启动刷盘有关调用链
+1.调用链
+2.线程类关系图
+三、线程类工作流程
+1.堆外内存线程类CommitRealTimeService工作流程
+2.同步刷盘线程类GroupCommitService工作流程
+3.异步刷盘线程类FlushRealTimeService工作流程
+四、消息追加与线程类的交互
+1.调用链
+2.同步刷盘主要代码
+3.异步刷盘主要代码
+五、刷盘方式示意图
+1.同步刷盘示意图
+2.异步刷盘未开启堆外缓存示意图
+3.异步刷盘开启堆外缓存示意图
+六、文章总结
+七、主要源码类清单
+
+
+二、Broker启动刷盘有关调用链

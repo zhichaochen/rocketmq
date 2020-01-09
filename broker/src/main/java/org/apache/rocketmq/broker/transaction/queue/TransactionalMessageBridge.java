@@ -49,9 +49,17 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 记录事务消息
+ */
 public class TransactionalMessageBridge {
     private static final InternalLogger LOGGER = InnerLoggerFactory.getLogger(LoggerName.TRANSACTION_LOGGER_NAME);
-
+    /**
+     * 缓存 half 和 Op MessageQueue
+     *      key ：表示prepare Queue，：记录prepare阶段的topic，和queueId
+     *      value：commit or rollback queue ：记录commit or rollback的 topic and queueId
+     *          表示 已经处理过的queue。
+     */
     private final ConcurrentHashMap<MessageQueue, MessageQueue> opQueueMap = new ConcurrentHashMap<>();
     private final BrokerController brokerController;
     private final MessageStore store;
@@ -71,17 +79,34 @@ public class TransactionalMessageBridge {
 
     }
 
+    /**
+     * 获取该队列的消费进度
+     *
+     * @param mq
+     * @return
+     */
     public long fetchConsumeOffset(MessageQueue mq) {
+        //从缓存中找到 消费队列的 offset
         long offset = brokerController.getConsumerOffsetManager().queryOffset(TransactionalMessageUtil.buildConsumerGroup(),
             mq.getTopic(), mq.getQueueId());
+
+        //如果没有找到，则返回该队列的开始位置。
         if (offset == -1) {
             offset = store.getMinOffsetInQueue(mq.getTopic(), mq.getQueueId());
         }
         return offset;
     }
 
+    /**
+     * 创建主题的消费队列
+     *
+     *  其中：事务消息
+     *      topic ：RMQ_SYS_TRANS_OP_HALF_TOPIC，
+     *      queueId ：0
+     */
     public Set<MessageQueue> fetchMessageQueues(String topic) {
         Set<MessageQueue> mqSet = new HashSet<>();
+        //查找topic配置
         TopicConfig topicConfig = selectTopicConfig(topic);
         if (topicConfig != null && topicConfig.getReadQueueNums() > 0) {
             for (int i = 0; i < topicConfig.getReadQueueNums(); i++) {
@@ -95,6 +120,13 @@ public class TransactionalMessageBridge {
         return mqSet;
     }
 
+    /**
+     * 更新prepare 消息的回查 offset
+     * 或者 更新 OP 消息的进度
+     *
+     * @param mq
+     * @param offset
+     */
     public void updateConsumeOffset(MessageQueue mq, long offset) {
         this.brokerController.getConsumerOffsetManager().commitOffset(
             RemotingHelper.parseSocketAddressAddr(this.storeHost), TransactionalMessageUtil.buildConsumerGroup(), mq.getTopic(),
@@ -192,16 +224,31 @@ public class TransactionalMessageBridge {
     }
 
     public PutMessageResult putHalfMessage(MessageExtBrokerInner messageInner) {
+        /**
+         * putMessage：将消息持久化
+         */
         return store.putMessage(parseHalfMessageInner(messageInner));
     }
 
+    /**
+     * 封装事务消息
+     *
+     * @param msgInner
+     * @return
+     */
     private MessageExtBrokerInner parseHalfMessageInner(MessageExtBrokerInner msgInner) {
+        //记录真正的topic
         MessageAccessor.putProperty(msgInner, MessageConst.PROPERTY_REAL_TOPIC, msgInner.getTopic());
+        //记录真正的queueId
         MessageAccessor.putProperty(msgInner, MessageConst.PROPERTY_REAL_QUEUE_ID,
             String.valueOf(msgInner.getQueueId()));
+
+        //取消是事务消息的消息标签，设置为不是事务消息
         msgInner.setSysFlag(
             MessageSysFlag.resetTransactionValue(msgInner.getSysFlag(), MessageSysFlag.TRANSACTION_NOT_TYPE));
+        //重新设置topic为 RMQ_SYS_TRANS_HALF_TOPIC
         msgInner.setTopic(TransactionalMessageUtil.buildHalfTopic());
+        //队列id固定为0
         msgInner.setQueueId(0);
         msgInner.setPropertiesString(MessageDecoder.messageProperties2String(msgInner.getProperties()));
         return msgInner;
@@ -221,6 +268,12 @@ public class TransactionalMessageBridge {
         return store.putMessage(messageInner);
     }
 
+    /**
+     * 将消息写入磁盘
+     *
+     * @param messageInner
+     * @return
+     */
     public boolean putMessage(MessageExtBrokerInner messageInner) {
         PutMessageResult putMessageResult = store.putMessage(messageInner);
         if (putMessageResult != null
@@ -267,6 +320,15 @@ public class TransactionalMessageBridge {
         return msgInner;
     }
 
+    /**
+     * 封装OpMessage，这时候的topic是：RMQ_SYS_TRANS_OP_HALF_TOPIC
+     * 将消息写入该topic，表示该消息已经被处理过。
+     * 为未处理的事务进行回查提供查找依据。
+     *
+     * @param message
+     * @param messageQueue
+     * @return
+     */
     private MessageExtBrokerInner makeOpMessageInner(Message message, MessageQueue messageQueue) {
         MessageExtBrokerInner msgInner = new MessageExtBrokerInner();
         msgInner.setTopic(message.getTopic());
@@ -285,6 +347,12 @@ public class TransactionalMessageBridge {
         return msgInner;
     }
 
+    /**
+     * 查找topic config
+     *
+     * @param topic
+     * @return
+     */
     private TopicConfig selectTopicConfig(String topic) {
         TopicConfig topicConfig = brokerController.getTopicConfigManager().selectTopicConfig(topic);
         if (topicConfig == null) {
@@ -309,12 +377,20 @@ public class TransactionalMessageBridge {
         return true;
     }
 
+    /**
+     * 将prepare消息放入 Op中，表示已经处理过
+     *
+     * @param message
+     * @param mq
+     */
     private void writeOp(Message message, MessageQueue mq) {
         MessageQueue opQueue;
         if (opQueueMap.containsKey(mq)) {
             opQueue = opQueueMap.get(mq);
         } else {
+            //构建MessageQueue
             opQueue = getOpQueueByHalf(mq);
+            //放入缓存
             MessageQueue oldQueue = opQueueMap.putIfAbsent(mq, opQueue);
             if (oldQueue != null) {
                 opQueue = oldQueue;
@@ -323,9 +399,17 @@ public class TransactionalMessageBridge {
         if (opQueue == null) {
             opQueue = new MessageQueue(TransactionalMessageUtil.buildOpTopic(), mq.getBrokerName(), mq.getQueueId());
         }
+        /**
+         * 将消息写入磁盘
+         */
         putMessage(makeOpMessageInner(message, opQueue));
     }
 
+    /**
+     * 封装MessageQueue
+     * @param halfMQ
+     * @return
+     */
     private MessageQueue getOpQueueByHalf(MessageQueue halfMQ) {
         MessageQueue opQueue = new MessageQueue();
         opQueue.setTopic(TransactionalMessageUtil.buildOpTopic());

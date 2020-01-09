@@ -23,10 +23,16 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.protocol.route.QueueData;
 import org.apache.rocketmq.common.protocol.route.TopicRouteData;
 
+/**
+ * topic 发布信息
+ */
 public class TopicPublishInfo {
+    //是否时有序
     private boolean orderTopic = false;
     private boolean haveTopicRouterInfo = false;
+    //该topic下的消息队列。
     private List<MessageQueue> messageQueueList = new ArrayList<MessageQueue>();
+    //存储上次发送的队列的索引
     private volatile ThreadLocalIndex sendWhichQueue = new ThreadLocalIndex();
     private TopicRouteData topicRouteData;
 

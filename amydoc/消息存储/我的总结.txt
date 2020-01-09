@@ -1,0 +1,27 @@
+一个消息文件，对应一个MappedFile。
+文件名就是当前文件的偏移量
+
+messageId ：由16个字节表示：ip（四个字节）+ port（四个字节） + commitlog偏移地址（8个字节）
+
+logicsOffset ？
+
+写入消息流程总结：
+    1、拼接消息
+        CommitLog#DefaultAppendMessageCallback#doAppend
+    2、写入消息
+        CommitLog#putMessage
+    3、刷盘
+        CommitLog#handleDiskFlush
+
+4、同步 or 异步刷盘
+    同步刷盘：每一次请求过来，写入磁盘之后才表示成功。
+    异步刷盘：先返回成功，异步写入磁盘。
+
+5、同步刷盘（GroupCommitService）
+    countDownLatch 这个类【使一个线程】【等待其他线程各自执行完毕后再执行】。
+    countDownLatch 不管有多少个线程正在运行，它只有在被调用countdown 直到 0 ，才会继续执行当前线程。
+
+    GroupCommitService ：该类竟然是一个线程，那么怎么同步写入的呢？
+    在当前线程 中使用new CountDownLatch(1)， 调用 CountDownLatch#await 方法。
+
+    当该线程执行完毕后，调用CountDownLatch#countdown。变成0 之后，main线程继续执行。

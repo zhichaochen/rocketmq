@@ -27,10 +27,25 @@ import org.apache.rocketmq.common.ServiceThread;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.common.utils.ThreadUtils;
 
+/**
+ * 拉取消息线程，当pullRequestQueue队列不为空的时候，就开始拉取消息了
+ *
+ * PullMessageService的工作职责是 从LinkedBlockQueue中循环取PullRequest对象，然后执行pullMessage方法
+ */
 public class PullMessageService extends ServiceThread {
     private final InternalLogger log = ClientLogger.getLog();
+    /**
+     * 缓存拉取消息请求
+     */
     private final LinkedBlockingQueue<PullRequest> pullRequestQueue = new LinkedBlockingQueue<PullRequest>();
+    /**
+     * MQClient
+     */
     private final MQClientInstance mQClientFactory;
+
+    /**
+     * 周期性任务线程池
+     */
     private final ScheduledExecutorService scheduledExecutorService = Executors
         .newSingleThreadScheduledExecutor(new ThreadFactory() {
             @Override
@@ -43,6 +58,13 @@ public class PullMessageService extends ServiceThread {
         this.mQClientFactory = mQClientFactory;
     }
 
+    /**
+     * 延迟拉取消息。
+     * 特别注意：这不是一个周期性线程，而是一个延迟线程，执行完毕就结束了。
+     *
+     * @param pullRequest
+     * @param timeDelay
+     */
     public void executePullRequestLater(final PullRequest pullRequest, final long timeDelay) {
         if (!isStopped()) {
             this.scheduledExecutorService.schedule(new Runnable() {
@@ -56,6 +78,11 @@ public class PullMessageService extends ServiceThread {
         }
     }
 
+    /**
+     * 立即执行拉取请求（本质上，是将拉取请求放入队列中。有拉取线程执行拉取消息）
+     *
+     * @param pullRequest
+     */
     public void executePullRequestImmediately(final PullRequest pullRequest) {
         try {
             this.pullRequestQueue.put(pullRequest);
@@ -76,7 +103,13 @@ public class PullMessageService extends ServiceThread {
         return scheduledExecutorService;
     }
 
+    /**
+     * 拉取消息
+     *
+     * @param pullRequest
+     */
     private void pullMessage(final PullRequest pullRequest) {
+        //获取消费者实例
         final MQConsumerInner consumer = this.mQClientFactory.selectConsumer(pullRequest.getConsumerGroup());
         if (consumer != null) {
             DefaultMQPushConsumerImpl impl = (DefaultMQPushConsumerImpl) consumer;
@@ -86,13 +119,24 @@ public class PullMessageService extends ServiceThread {
         }
     }
 
+    /**
+     * 轮询取pullRequestQueue队列中的PullRequest对象
+     */
     @Override
     public void run() {
         log.info(this.getServiceName() + " service started");
 
         while (!this.isStopped()) {
             try {
+                /**
+                 * 如果pullRequestQueue为空，阻塞当前线程。
+                 *
+                 * 项目启动后，当重新负载完成后，pullRequestQueue中便会有数据。
+                 */
                 PullRequest pullRequest = this.pullRequestQueue.take();
+                /**
+                 * 开始拉取消息
+                 */
                 this.pullMessage(pullRequest);
             } catch (InterruptedException ignored) {
             } catch (Exception e) {

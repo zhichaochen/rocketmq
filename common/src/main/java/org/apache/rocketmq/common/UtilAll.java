@@ -54,6 +54,10 @@ public class UtilAll {
     public static final String YYYYMMDDHHMMSS = "yyyyMMddHHmmss";
     final static char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
 
+    /**
+     * 获取进程Id
+     * @return
+     */
     public static int getPid() {
         RuntimeMXBean runtime = ManagementFactory.getRuntimeMXBean();
         String name = runtime.getName(); // format: "pid@hostname"
@@ -76,6 +80,10 @@ public class UtilAll {
 
     }
 
+    /**
+     * 当前的堆栈信息。
+     * @return
+     */
     public static String currentStackTrace() {
         StringBuilder sb = new StringBuilder();
         StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
@@ -87,6 +95,11 @@ public class UtilAll {
         return sb.toString();
     }
 
+    /**
+     * 将Offset转化为文件名称
+     * @param offset
+     * @return
+     */
     public static String offset2FileName(final long offset) {
         final NumberFormat nf = NumberFormat.getInstance();
         nf.setMinimumIntegerDigits(20);
@@ -95,6 +108,11 @@ public class UtilAll {
         return nf.format(offset);
     }
 
+    /**
+     * 计算用的时间
+     * @param beginTime
+     * @return
+     */
     public static long computeElapsedTimeMilliseconds(final long beginTime) {
         return System.currentTimeMillis() - beginTime;
     }

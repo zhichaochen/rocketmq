@@ -1,0 +1,66 @@
+1、
+    Topic是一个逻辑上的概念，实际上在每个broker上以queue的形式保存，
+    也就是说每个topic在broker上会划分成几个逻辑队列，每个逻辑队列保存一部分消息数据，
+    但是保存的消息数据实际上不是真正的消息数据，而是指向commit log的消息索引。
+
+    Topic创建的时候可以用集群模式去创建（这样集群里面每个broker的queue的数量相同），
+    也可以用单个broker模式去创建（这样每个broker的queue数量可以不一致）。
+
+    每个broker上的角色是等同的，也就是说每个broker上面的queue保存了该topic下一部分消息，注意是一部分而不是全量消息。
+
+2、使用 cli 工具创建topic
+    在rocketMq编译后的bin目录下有一个mqadmin的工具，该工具作为rocketMq的CLI工具对外提供，
+    使用时候可以通过sh mqadmin -h 或者sh mqadmin command -h查看用法。
+
+        updateTopic和deleteTopic是实际中操作topic的命令。
+
+    说明：
+        创建topic需要指定的参数，
+        -b 【指定broker上创建topic】
+        -c 【指定cluster创建topic】
+        -n 指定namesrv地址，cluster模式下必须从namesrv获取broker地址
+        -t topic的名字标志
+        -r/w 读写队列的个数，建议相等
+        -p queue的读写权限
+        -o 待研究不确定是不是保证全局有序消息的配置
+
+3、topic的创建过程
+    参考图片：
+
+    说明：
+
+        topic的创建过程涉及到3个组件，分别是mqadmin、broker、namesrv。
+
+        整个创建过程是mqadmin->broker->namesrv。
+
+        mqadmin：通知broker创建topic和对应的queue信息。
+
+        broker：在本地持久化一份topic配置，转发通知namesrv保存topic和broker的原信息。
+
+            broker在这个时候不真正创建本地的队列信息
+        namesrv ：
+4、mqadmin操作过程
+    参见 UpdateTopicSubCommand类
+    注册参数和updateTopic显示帮助是一致的
+
+    支持cluster模式下创建topic和支持broker模式下创建topic
+        1、集群模式：broker集群下所有master创建topic
+            下首先通过namesrv获取所有的broker的master地址，然后通知每个broker去创建topic，
+        2、broker模式：单个broker创建topic。
+
+
+
+
+5、Broker操作过程。
+    参见AdminBrokerProcessor类
+
+    参见 ：AdminBrokerProcessor#processRequest
+    参见 ：AdminBrokerProcessor#updateAndCreateTopic
+    参见 ：BrokerController#registerBrokerAll
+
+    1、broker本地通过updateTopicConfig【保存topic的配置信息并持久化】
+    2、broker通过registerBrokerAll通知namesrv保存topic信息
+
+6、namesrv操作过程
+    参见DefaultRequestProcessor类
+    参见：RouteInfoManager类

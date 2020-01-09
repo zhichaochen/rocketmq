@@ -1,0 +1,152 @@
+参考：https://blog.csdn.net/prestigeding/article/details/81263833
+
+1、Demo 实例
+    Demo实例程序位于：
+    /rocketmq-example/src/main/java/org/apache/rocketmq/example/transaction包中。
+
+    从而先运行生产者，然后运行消费者，判断事务消息的预发放、提交、回滚等效果，
+    二话不说，先运行一下，看下效果再说：
+
+
+
+2、实例代码分析（核心示例）
+     TransactionProducer：发送事务消息的示例代码
+     TransactionListenerImpl：事务监听器
+
+=====================================二阶段提交
+3、RocketMQ事务消息实现原理上篇
+    根据上节Demo示例，发送事务消息的入口为：
+        TransactionMQProducer#sendMessageInTransaction：
+    Step1 ：
+        DefaultMQProducerImpl#sendMessageInTransaction
+        添加事务消息属性
+
+    Step2 ：
+        DefaultMQProducerImpl#sendKernelImpl
+        在消息发送之前，会先检查消息的属性TRAN_MSG,如果存在并且值为true，则通过设置消息系统标记的方式，
+        设置消息为MessageSysFlag.TRANSACTION_PREPARED_TYPE。
+
+        final String tranMsg = msg.getProperty(MessageConst.PROPERTY_TRANSACTION_PREPARED);
+        if (tranMsg != null && Boolean.parseBoolean(tranMsg)) {
+            sysFlag |= MessageSysFlag.TRANSACTION_PREPARED_TYPE;
+        }
+    Step3 ：
+        TransactionalMessageServiceImpl#prepareMessage
+
+        Broker端首先客户发送消息请求后，判断消息类型，如果是事务消息，
+        则调用TransactionalMessageService#prepareMessage方法，
+        否则走原先的逻辑，调用MessageStore#putMessage方法。
+
+    step4：事务消息，将调用TransactionalMessageServiceImpl#prepareMessage方法，
+        ·继而调用TransactionalMessageBridge#prepareMessage方法。
+
+        参考：TransactionalMessageBridge#parseHalfMessageInner方法。
+
+    step5：
+        消息入库后，会继续回到
+        DefaultMQProducerImpl#sendMessageInTransaction，
+        也就是通过同步将消息发送到消息服务端。
+
+        发送成功：更新本地事务状态。
+        发送失败：设置RollBack表示，表示回滚。
+    =======================================
+    第二阶段提交
+
+    step6：
+        DefaultMQProducerImpl#endTransaction
+        调用endTransaction方法结束事务（提交或回滚）。
+
+        根据事务的状态，组装结束事务的请求头
+
+    7、broker端结束事务
+        Broker端的请求处理器为：EndTransactionProcessor。
+
+4、总结来说
+    我的总结，先发送prepared类型的消息，消息返回成功之后，根据
+
+    RocketMQ的事务消息发送使用二阶段提交思路，
+        1、在消息发送时，先发送消息类型为Prepread类型的消息，
+        2、然后在将该消息成功存入到消息服务器后，
+            会回调   TransactionListener#executeLocalTransaction，
+        执行本地事务状态回调函数，然后根据该方法的返回值，结束事务：
+
+        1、COMMIT_MESSAGE ：提交事务。
+        2、ROLLBACK_MESSAGE：回滚事务。
+        3、UNKNOW：
+            未知事务状态，此时消息服务器(Broker)收到EndTransaction命令时，将不对这种消息做处理，
+            消息还处于Prepared类型，存储在主题为：RMQ_SYS_TRANS_HALF_TOPIC的队列中，
+
+            然后消息发送流程将结束，那这些消息如何提交或回滚呢？
+            为了实现避免客户端需要再次发送提交、回滚命令，RocketMQ会采取定时任务将
+            RMQ_SYS_TRANS_HALF_TOPIC中的消息取出，然后回到客户端，判断该消息是否需要提交或回滚，
+            来完成事务消息的声明周期，
+===========================================================================================
+=====================================事务状态消息回查
+1、
+    第一次提交到消息服务器，消息的主题被替换为RMQ_SYS_TRANS_HALF_TOPIC，当执行本地事务，
+    如果返回【本地事务状态为UN_KNOW时】，第二次提交到服务器时将不会做任何操作，
+    也就是消息还存在与RMQ_SYS_TRANS_HALF_TOPIC主题中，并不能被消息消费者消费，
+    那这些消息最终如何被提交或回滚呢？
+
+    原来RocketMQ使用TransactionalMessageCheckService线程定时去检测
+    RMQ_SYS_TRANS_HALF_TOPIC主题中的消息，回查消息的事务状态。
+    TransactionalMessageCheckService的检测频率默认1分钟，可通过在broker.conf文件中设置
+    transactionCheckInterval的值来改变默认值，单位为毫秒。
+
+2、
+    TransactionalMessageCheckService#onWaitEnd
+    org.apache.rocketmq.broker.transaction.queue.TransactionalMessageServiceImpl
+       TransactionalMessageServiceImpl#check
+
+3、TransactionalMessageService#check
+
+    RMQ_SYS_TRANS_HALF_TOPIC、RMQ_SYS_TRANS_OP_HALF_TOPIC这两个主题的作用。
+        RMQ_SYS_TRANS_HALF_TOPIC：prepare消息的主题，事务消息首先先进入到该主题。
+        RMQ_SYS_TRANS_OP_HALF_TOPIC：当消息服务器收到事务消息的提交或回滚请求后，会将消息存储在该主题下。
+            为未处理的事务进行回查提供查找依据。
+
+
+
+4、异步方式发送消息回查的实现过程。
+    AbstractTransactionalMessageCheckListener#sendCheckMessage
+
+
+=====================================================================
+==============================Broker如何处理事务消息提交、回滚命令
+1、
+    EndTransactionProcessor#processRequest
+
+    其核心实现就是:
+        1、根据commitlogOffset找到消息。
+        2、如果是提交动作：
+            就恢复原消息的主题与队列，【再次存入commitlog文件】进而转到消息消费队列，供消费者消费，
+            然后将原预处理消息存入一个新的主题RMQ_SYS_TRANS_OP_HALF_TOPIC，代表该消息已被处理；
+
+        3、如果是回滚消息
+            与提交事务消息不同的是，提交事务消息会将消息恢复原主题与队列，再次存储在commitlog文件中。源码入口：
+
+  
+
+==================================================================
+事务消息实战
+https://blog.csdn.net/prestigeding/article/details/81318980
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -16,10 +16,21 @@
  */
 package org.apache.rocketmq.common;
 
+/**
+ * MQ的版本信息
+ */
 public class MQVersion {
-
+    /**
+     * 表示当前版本 V4_6_0
+     * ordinal，表示返回枚举类常量的一个序数，就是表示第几个常量。
+     */
     public static final int CURRENT_VERSION = Version.V4_6_0.ordinal();
 
+    /**
+     * 通过序号，获取version
+     * @param value
+     * @return
+     */
     public static String getVersionDesc(int value) {
         int length = Version.values().length;
         if (value >= length) {

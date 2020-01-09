@@ -18,6 +18,9 @@ package org.apache.rocketmq.remoting.netty;
 
 import io.netty.channel.Channel;
 
+/**
+ * 表示一个netty事件，比如断开连接
+ */
 public class NettyEvent {
     private final NettyEventType type;
     private final String remoteAddr;

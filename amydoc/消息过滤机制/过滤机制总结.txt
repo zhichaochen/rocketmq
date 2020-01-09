@@ -1,0 +1,6 @@
+1、消息过滤三种方式
+    tag，Sql92，ClassFilter
+
+
+1、根据 tag code 过滤
+

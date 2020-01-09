@@ -16,6 +16,11 @@
  */
 package org.apache.rocketmq.remoting.common;
 
+/**
+ * 一对儿
+ * @param <T1>
+ * @param <T2>
+ */
 public class Pair<T1, T2> {
     private T1 object1;
     private T2 object2;
@@ -25,6 +30,10 @@ public class Pair<T1, T2> {
         this.object2 = object2;
     }
 
+    /**
+     * 获取第一个值
+     * @return
+     */
     public T1 getObject1() {
         return object1;
     }
@@ -33,6 +42,10 @@ public class Pair<T1, T2> {
         this.object1 = object1;
     }
 
+    /**
+     * 获取第二个值
+     * @return
+     */
     public T2 getObject2() {
         return object2;
     }

@@ -21,15 +21,18 @@ import java.util.Map;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
 
+/**
+ * 消费消息上下文
+ */
 public class ConsumeMessageContext {
-    private String consumerGroup;
-    private List<MessageExt> msgList;
-    private MessageQueue mq;
-    private boolean success;
-    private String status;
-    private Object mqTraceContext;
-    private Map<String, String> props;
-    private String namespace;
+    private String consumerGroup;//消费组
+    private List<MessageExt> msgList;//消息列表
+    private MessageQueue mq;//消息队列
+    private boolean success;//是否消费成功
+    private String status;//消费状态，参见：ConsumeConcurrentlyStatus
+    private Object mqTraceContext;//
+    private Map<String, String> props;//属性
+    private String namespace;//命名空间
 
     public String getConsumerGroup() {
         return consumerGroup;

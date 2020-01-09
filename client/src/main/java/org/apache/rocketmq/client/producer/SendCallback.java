@@ -16,8 +16,21 @@
  */
 package org.apache.rocketmq.client.producer;
 
+/**
+ * 消息发送回调函数。
+ * 在异步发送消息的时候，我们需要实现该接口，等待接收发送结果。
+ */
 public interface SendCallback {
+    /**
+     * 消息发送成功做什么
+     *
+     * @param sendResult
+     */
     void onSuccess(final SendResult sendResult);
 
+    /**
+     * 发送异常做什么。
+     * @param e
+     */
     void onException(final Throwable e);
 }

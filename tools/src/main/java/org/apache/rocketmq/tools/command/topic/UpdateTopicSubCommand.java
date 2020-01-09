@@ -30,18 +30,35 @@ import org.apache.rocketmq.tools.command.CommandUtil;
 import org.apache.rocketmq.tools.command.SubCommand;
 import org.apache.rocketmq.tools.command.SubCommandException;
 
+/**
+ * 更新topic命令
+ */
 public class UpdateTopicSubCommand implements SubCommand {
 
+    /**
+     * 命令名称
+     * @return
+     */
     @Override
     public String commandName() {
         return "updateTopic";
     }
 
+    /**
+     * 命令描述
+     * @return
+     */
     @Override
     public String commandDesc() {
         return "Update or create topic";
     }
 
+    /**
+     * 命令行的option
+     *
+     * @param options
+     * @return
+     */
     @Override
     public Options buildCommandlineOptions(Options options) {
         OptionGroup optionGroup = new OptionGroup();
@@ -86,6 +103,14 @@ public class UpdateTopicSubCommand implements SubCommand {
         return options;
     }
 
+    /**
+     * 执行命令
+     *
+     * @param commandLine
+     * @param options
+     * @param rpcHook
+     * @throws SubCommandException
+     */
     @Override
     public void execute(final CommandLine commandLine, final Options options,
         RPCHook rpcHook) throws SubCommandException {
@@ -134,7 +159,9 @@ public class UpdateTopicSubCommand implements SubCommand {
 
             if (commandLine.hasOption('b')) {
                 String addr = commandLine.getOptionValue('b').trim();
-
+                /**
+                 * broker模式创建topic，也就是只在一个master broker上创建topic
+                 */
                 defaultMQAdminExt.start();
                 defaultMQAdminExt.createAndUpdateTopicConfig(addr, topicConfig);
 
@@ -151,9 +178,15 @@ public class UpdateTopicSubCommand implements SubCommand {
 
             } else if (commandLine.hasOption('c')) {
                 String clusterName = commandLine.getOptionValue('c').trim();
-
+                /**
+                 * 集群模式创建topic，也就是broker集群中，所有的master上创建topic
+                 */
                 defaultMQAdminExt.start();
 
+                /**
+                 * 去注册中心获取集群master地址。
+                 * 然后，循环地址，调用各个broker master，创建topic。
+                 */
                 Set<String> masterSet =
                     CommandUtil.fetchMasterAddrByClusterName(defaultMQAdminExt, clusterName);
                 for (String addr : masterSet) {

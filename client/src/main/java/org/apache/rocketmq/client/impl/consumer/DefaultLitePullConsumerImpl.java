@@ -72,6 +72,10 @@ import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.remoting.RPCHook;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 
+/**
+ * 消费者(pull方式)
+ * 我们在创建消费者的时候，使用pull方式拉取消息，就是创建该对象
+ */
 public class DefaultLitePullConsumerImpl implements MQConsumerInner {
 
     private final InternalLogger log = ClientLogger.getLog();

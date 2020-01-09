@@ -18,14 +18,25 @@ package org.apache.rocketmq.store;
 
 import java.nio.ByteBuffer;
 
+/**
+ * MappedBuffer的查询结果（可能包含多条消息）
+ *
+ * 消息在文件中的位置。表示消息的查询结果。
+ */
 public class SelectMappedBufferResult {
-
+    //开始位置
     private final long startOffset;
 
+    //ByteBuffer对象
     private final ByteBuffer byteBuffer;
 
+    /**
+     * 数据的长度
+     * （在主从同步的时候，使用master的max offset - slave的 max offset，这部分数据都传输过去了。）
+     */
     private int size;
 
+    //消息所在的文件
     private MappedFile mappedFile;
 
     public SelectMappedBufferResult(long startOffset, ByteBuffer byteBuffer, int size, MappedFile mappedFile) {
@@ -55,6 +66,9 @@ public class SelectMappedBufferResult {
 //        }
 //    }
 
+    /**
+     * 释放mappedFile的引用
+     */
     public synchronized void release() {
         if (this.mappedFile != null) {
             this.mappedFile.release();

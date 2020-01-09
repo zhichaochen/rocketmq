@@ -1,0 +1,5 @@
+1、 NettyServerConfig、RemotingServer 、ExecutorService
+    这三个属性与网络通信有关
+    NameServer 与 Broker、Producer、Consume 之间的网络通信，基于 Netty实现
+
+2、NettyServerConfig

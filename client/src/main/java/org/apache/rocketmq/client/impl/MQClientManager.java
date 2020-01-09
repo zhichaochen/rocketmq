@@ -29,6 +29,9 @@ public class MQClientManager {
     private final static InternalLogger log = ClientLogger.getLog();
     private static MQClientManager instance = new MQClientManager();
     private AtomicInteger factoryIndexGenerator = new AtomicInteger();
+    /**
+     * 缓存客户端实例：key：客户端id ，value：实例
+     */
     private ConcurrentMap<String/* clientId */, MQClientInstance> factoryTable =
         new ConcurrentHashMap<String, MQClientInstance>();
 
@@ -44,8 +47,17 @@ public class MQClientManager {
         return getOrCreateMQClientInstance(clientConfig, null);
     }
 
+    /**
+     * 创建客户端实例
+     *
+     * @param clientConfig
+     * @param rpcHook
+     * @return
+     */
     public MQClientInstance getOrCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
+        // 构建客户端ID ： IP + @ + 实例名（进程号）
         String clientId = clientConfig.buildMQClientId();
+        // 从缓存获取实例
         MQClientInstance instance = this.factoryTable.get(clientId);
         if (null == instance) {
             instance =

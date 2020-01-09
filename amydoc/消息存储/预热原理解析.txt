@@ -1,0 +1,77 @@
+参考：https://www.jianshu.com/p/eddbd2371a7a
+1、问题描述
+    1.为什么创建文件（commitLog）时要预热？
+    2.为什么要写入1G大小的假值（0）呢？
+    3.为什么要锁定内存？
+    4.预热流程是怎么样的？
+
+1、创建 MappedFile 文件
+    MappedFile#mmapOperation
+2、预测代码
+    mappedFile#warmMappedFile
+
+=========================================================
+
+1、为什么要写入1G大小的假值（0）呢？
+    既然空文件和写入1G字节虚拟内存映射都是1G大小，写入1G大小的意义呢？
+
+    使用mmap()内存分配时，只是建立了进程虚拟地址空间，并没有分配虚拟内存对应的物理内存。
+    当进程访问这些没有建立映射关系的虚拟内存时，处理器自动触发一个缺页异常，
+    进而进入内核空间分配物理内存、更新进程缓存表，最后返回用户空间，恢复进程运行。
+
+    小结：写入这些假值的意义在于实际分配物理内存，在消息写入时防止缺页异常
+
+
+3、内存映射简图（参考：内存映射简图.jpg）
+    虚拟内存
+        计算机系统内存管理的一种技术。它使得应用程序认为它拥有连续的可用的内存（一个连续完整的地址空间），
+        而实际上，它通常是被分隔成多个物理内存碎片，还有部分暂时存储在外部磁盘存储器上，
+        在需要时进行数据交换虚拟地址空间的内部又被分为内核空间和用户空间两部分，
+        进程在用户态时，只能访问用户空间内存；只有进入内核态后，才可以访问内核空间内存
+
+    MMU
+        MMU是Memory Management Unit的缩写，中文名是内存管理单元，
+        它是中央处理器（CPU）中用来管理虚拟存储器、物理存储器的控制线路，
+        同时也负责虚拟地址映射为物理地址
+
+    页表
+        是虚拟内存系统用来存储逻辑地址和物理地址之间映射的数据结构
+
+    内存映射mmap
+        将虚拟地址映射到物理地址
+
+
+4、Native API解释
+    mmap
+        映射文件或设备到内存
+        void mmap(void *start, size_t length, int prot, int flags, int fd, off_t offset);
+
+    mlock
+        锁定内存
+        int mlock(const void *addr, size_t len);
+
+    madvise
+        提出建议关于使用内存
+        int madvise(void *start, size_t length, int advice);
+
+
+    MADV_WILLNEED模式（MappedFile预热使用该模式）
+    MADV_WILLNEED：Expect access in the near future. (Hence, it might be a good idea to read some pages ahead.)
+
+6、总结：
+    1.Broker默认配置warmMapedFileEnable为false，开启预热需要设置true。
+    2.写入1G字节假值0是为了让系统分配物理内存空间，如果没有这些假值，系统不会实际分配物理内存，防止在写入消息时发生缺页异常。
+    3.mlock锁定内存，防止其被交换到swap空间。
+    4.madvise建议操作系统如何使用内存，MADV_WILLNEED提前预热，预读一些页面，提高性能。
+    5.【文件预热使得内存提前分配】，【并锁定在内存中】，【在写入消息时不必再进行内存分配】。
+
+
+
+
+
+
+
+
+
+
+

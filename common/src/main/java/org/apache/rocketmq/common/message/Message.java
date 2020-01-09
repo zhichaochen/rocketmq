@@ -22,13 +22,19 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * 表示一条消息
+ */
 public class Message implements Serializable {
     private static final long serialVersionUID = 8445773977080406428L;
-
+    //topic
     private String topic;
     private int flag;
+    //属性
     private Map<String, String> properties;
+    //消息体
     private byte[] body;
+    //事务Id
     private String transactionId;
 
     public Message() {
@@ -149,6 +155,10 @@ public class Message implements Serializable {
         this.putProperty(MessageConst.PROPERTY_DELAY_TIME_LEVEL, String.valueOf(level));
     }
 
+    /**
+     * 发送同步消息的时候，是否一定要收到成功，才返回。
+     * @return
+     */
     public boolean isWaitStoreMsgOK() {
         String result = this.getProperty(MessageConst.PROPERTY_WAIT_STORE_MSG_OK);
         if (null == result)

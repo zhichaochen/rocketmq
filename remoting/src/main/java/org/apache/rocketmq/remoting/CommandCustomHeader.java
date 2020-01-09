@@ -18,6 +18,11 @@ package org.apache.rocketmq.remoting;
 
 import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 
+/**
+ * 自定义的头信息。
+ * 也就是说，头信息不是序列化的RemotingCommand对象
+ * 而是序列化的其他对象。所以，需要通过反射，将请求头信息，封装进该对象。
+ */
 public interface CommandCustomHeader {
     void checkFields() throws RemotingCommandException;
 }

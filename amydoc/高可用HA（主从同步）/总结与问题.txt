@@ -1,0 +1,161 @@
+
+主从同步总结
+1、slave会报告 slave的 物理max offset。
+2、master收到后，会查询 【master 比 salve 多出的offset】，作为查询结果
+3、如果数据内容超过 32kb，则按32kb进行传输。如此，循环同步。
+
+
+
+
+1、RocketMQ 的主从同步机制如下：
+    A. 首先启动Master并监听指定端口；
+    B. 客户端启动，主动连接Master，建立TCP连接；
+    C. 客户端以每隔5s的间隔时间向服务端拉取消息，如果是第一次拉取的话，先获取本地commitlog文件中最大的偏移量，以该偏移量向服务端拉取消息；
+    D. 服务端解析请求，并返回一批数据给客户端；
+    E. 客户端收到一批消息后，将消息写入本地commitlog文件中，然后向Master汇报拉取进度，并更新下一次待拉取偏移量；
+    F. 然后重复第3步；
+
+    RocketMQ主从同步一个重要的特征：主从同步不具备主从切换功能，即当主节点宕机后，从不会接管消息发送，但可以提供消息读取。
+
+2、主从同步，都是使用的短连接。
+
+3、
+    一个线程监听
+
+4、同步消息，同步到磁盘
+    也不是 重新开启一个线程，发送socket消息。
+
+    还是等待 WaitSocketThread 同步完成。
+
+    同步消息仅仅是 根据设置的等待时长，去等待一会儿，具体的工作，还是等待WaitSocketThread去执行。
+    这样做的好处是：同步的顺序，也是消息发送的顺序。
+
+    异步消息：返回发送成功，有线程异步去刷盘
+    同步消息：当前线程，阻塞直到刷盘成功，同步成功，才会返回写入消息成功。
+
+=====================================问题
+1、主，从服务器都在运行过程中，消息消费者是从主拉取消息还是从从拉取？
+
+2、RocketMQ主从同步架构中，如果主服务器宕机，从服务器会接管消息消费，此时消息消费进度如何保持，
+    当主服务器恢复后，消息消费者是从主拉取消息还是从从服务器拉取，
+    主从服务器之间的消息消费进度如何同步？
+
+3、RocketMQ的主从同步，在默认情况下RocketMQ会优先选择从主服务器进行拉取消息，
+并不是通常意义的上的读写分离，那什么时候会从拉取呢？
+====================================源码分析
+1、开始同步刷盘
+    同步刷盘：持久化到磁盘，且同步到slave。都必须完成。
+
+    在CommitLog#handleDiskFlush刷盘操作之后，立马执行同步操作。
+    CommitLog#handleHA
+    当是Master的角色，且同步发送数据的时候，才会执行handleHA方法。
+
+
+2、各个重要的类及其作用：
+    1、
+        master启动的时候，创建HAService#AcceptSocketService线程。
+
+        【该线程用于接受slave的连接】。
+
+        接受到连接之后，创建HAConnection对象，并缓存
+
+
+    2、master启动的时候，创建HAService#GroupTransferService线程
+        GroupTransferService的职责【就是判断主从同步是否结束】。
+
+        当没有消息同步的时候，GroupTransferService会休息100ms
+        当同步消息到来的时候，
+
+        我的总结：如果生产消息是同步模式，那么需要
+            1、强制刷写到磁盘。
+            2、同步到slave。
+            这两个条件都满足，才能表示发送成功。
+
+        GroupTransferService 就是处理在同步模式下，将持久化之后的消息再同步到slave的过程。
+
+        该类的整体结构与同步刷盘实现类(CommitLog$GroupCommitService)类似
+
+
+            判断主从同步是否完成的依据是？？？？
+                所有Slave中【已成功复制的最大偏移量】是否大于等于【消息生产者发送消息后消息服务端返回下一条消息的起始偏移量，
+                    如果是：则表示主从同步复制已经完成，唤醒消息发送线程。
+                    不是：等待1s,再次判断，每一个任务在一批任务中循环判断5次。
+                消息消费者返回有两种情况：
+                    如果等待超过5s或 GroupTransferService通知主从复制完成则返回。
+                    可以通过syncFlushTimeout来设置等待时间
+
+
+    3、master启动的时候，创建HAService#HAService线程
+         HAService ：只需要持续不断的读就可以了。
+         写的话：就是报告自己的offset。
+
+
+    4、HAConnection
+        master接受到Slave连接的时候。会创建HAConnection对象
+        1、ReadSocketService线程
+            作用：处理slave发来的数据
+
+        2、WriteSocketService线程
+            作用：向salve发送数据。
+
+            当有消息同步的时候，WriteSocketService一刻不停的同步，
+            当没有消息同步的时候，WriteSocketService休息100ms
+
+========================================================================
+问题：
+1、HAService：什么时候报告自己的offset？？？
+    每隔五秒，或者同步完成一条消息，就及时报告一下自己的offset。
+
+2、WaitNotifyObject的作用？？？
+    主要作用，缓存休息的，WriteSocketService, 当有任务到来的时候通知WriteSocketService 开始工作。
+
+3、同步消息，异步消息如何分别处理？？？
+    1、异步消息。
+        1、HAClient：连接到master，并发送来slave已经同步完成的offset（max offset）
+        2、ReadSocketService接收到请求，
+            解析数据，得到slave max offset，并通知WriteSocketService线程，立马开始工作。
+
+        3、WriteSocketService线程接收到通知。
+            WriteSocketService线程在有工作的时候，会马不停蹄的工作
+            没有工作的时候，会休息100ms，时间到了之后，继续判断是否有同步工作。
+
+            WriteSocketService线程在休息的时候，如果有同步请求过来，立马开始工作。
+
+        4、同步数据
+            根据slave报告的offset，和 master 的 max offset进行对比。
+            同步master offset - slave offset 这部分数据。
+
+            一次最多只传输32kb。超过的下次传输。
+
+        5、HAClient 读取传输过来的消息，并进行持久化。
+
+    2、同步消息
+        与异步消息的区别是：多了个GroupTransferService线程的参与。
+
+        第三步有所不同。
+        在第三步，不仅接收到slave的同步请求，会立马开始工作。
+        同时呢，接收到 生产的同步消息的 ，同步请求时，也会立马开始工作。
+
+        参见：GroupTransferService线程详解
+
+4、GroupTransferService线程详解
+    同步消息入口：CommitLog#handleHA
+
+    该线程的作用是判断同步消息，的同步工作是否完成。
+
+    同步消息同步的时候，也【并不是触发一个任务，主动向slave发送消息】，这样会导致消息顺序不一致等问题。
+    而是通知做同步工作线程WriteSocketService，开始同步工作。write线程去做的同步工作。
+
+    WriteSocketService线程是一批一批的去同步，需要把之前的消息先同步，才处理后面的。
+    当有同步消息的，请求过来的时候，通知Write线程，并不会加快处理速度。
+    只是加入write线程在睡觉的时候，通知它起来工作，write线程正在工作的时候，按顺序同步master已经持久了的消息。
+
+
+
+    GroupTransferService 的作用，便是监控这些【同步消息的 同步请求】是否同步完毕。
+    1、同步消息的，同步到slave的超时时长，默认是5s
+    2、在5s内完成，直接返回同步成功。
+    3、超过5s，也直接返回，并唤醒阻塞的同步请求。
+        broker 会告诉 produce的同步状态是，HA timeout。
+
+    故而GroupTransferService的作用，仅仅是监控，哪些同步请求HA完成，哪些同步请求timeout.\

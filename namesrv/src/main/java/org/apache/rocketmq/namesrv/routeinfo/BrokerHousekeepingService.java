@@ -23,6 +23,11 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.namesrv.NamesrvController;
 import org.apache.rocketmq.remoting.ChannelEventListener;
 
+/**
+ * 实现 ChannelEventListener接口，可以说是通道在发送异常时的回调方法
+ *
+ * 通道在关闭、通道发送异常、通道空闲时，移除已宕机的 Broker。
+ */
 public class BrokerHousekeepingService implements ChannelEventListener {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final NamesrvController namesrvController;
@@ -45,6 +50,11 @@ public class BrokerHousekeepingService implements ChannelEventListener {
         this.namesrvController.getRouteInfoManager().onChannelDestroy(remoteAddr, channel);
     }
 
+    /**
+     * 什么叫通道空闲？？
+     * @param remoteAddr
+     * @param channel
+     */
     @Override
     public void onChannelIdle(String remoteAddr, Channel channel) {
         this.namesrvController.getRouteInfoManager().onChannelDestroy(remoteAddr, channel);

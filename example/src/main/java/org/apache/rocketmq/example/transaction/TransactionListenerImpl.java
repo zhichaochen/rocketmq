@@ -24,11 +24,21 @@ import org.apache.rocketmq.common.message.MessageExt;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * 事务监听器（示例）
+ */
 public class TransactionListenerImpl implements TransactionListener {
     private AtomicInteger transactionIndex = new AtomicInteger(0);
-
+    /**
+     * 记录消息事务状态，其中，key：事务Id，value：事务状态。
+     */
     private ConcurrentHashMap<String, Integer> localTrans = new ConcurrentHashMap<>();
 
+    /**
+     * 记录本地事务的事务状态
+     *
+     * 这里其实现就是循环设置事务消息的状态为0,1,2
+     */
     @Override
     public LocalTransactionState executeLocalTransaction(Message msg, Object arg) {
         int value = transactionIndex.getAndIncrement();
@@ -37,6 +47,14 @@ public class TransactionListenerImpl implements TransactionListener {
         return LocalTransactionState.UNKNOW;
     }
 
+    /**
+     * 查本地事务表，判断事务的状态
+     * 其中；
+     *      0 : 未知状态
+     *      1 ：提交状态
+     *      2 ：回滚状态
+     *      默认：提交状态
+     */
     @Override
     public LocalTransactionState checkLocalTransaction(MessageExt msg) {
         Integer status = localTrans.get(msg.getTransactionId());

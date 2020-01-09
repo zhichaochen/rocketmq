@@ -1,0 +1,5 @@
+1、
+    QueueData ：描述了一个topic对应的队列信息，包括读写队列数量，本身并没有队列
+
+2、topic和broker的关系
+    topic通过QueueData的brokerName属性,关联到了broker，

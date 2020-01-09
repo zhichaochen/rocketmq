@@ -20,21 +20,51 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * 索引文件的头信息
+ */
 public class IndexHeader {
+    //索引头总共有40个字节
     public static final int INDEX_HEADER_SIZE = 40;
-    private static int beginTimestampIndex = 0;
-    private static int endTimestampIndex = 8;
-    private static int beginPhyoffsetIndex = 16;
-    private static int endPhyoffsetIndex = 24;
-    private static int hashSlotcountIndex = 32;
-    private static int indexCountIndex = 36;
-    private final ByteBuffer byteBuffer;
-    private AtomicLong beginTimestamp = new AtomicLong(0);
-    private AtomicLong endTimestamp = new AtomicLong(0);
-    private AtomicLong beginPhyOffset = new AtomicLong(0);
-    private AtomicLong endPhyOffset = new AtomicLong(0);
-    private AtomicInteger hashSlotCount = new AtomicInteger(0);
 
+    /**
+     * ==============头信息索引=================
+     *
+     * 后面的数字表示占用多少个字节。总共40个字节
+     */
+    //开始时间戳：8个字节
+    private static int beginTimestampIndex = 0;
+    //结束时间戳：8个字节。
+    private static int endTimestampIndex = 8;
+    //索引文件的开始offset：8个字节
+    private static int beginPhyoffsetIndex = 16;
+    //结束的offset：8个字节，记录CommitLog最新提交到IndexFile的Offset
+    private static int endPhyoffsetIndex = 24;
+    //hash槽：4个字节（36-32），最大500玩
+    private static int hashSlotcountIndex = 32;
+    //索引总数：4个字节，最大2000万
+    private static int indexCountIndex = 36;
+    //字节缓存
+    private final ByteBuffer byteBuffer;
+    //===========================================
+
+    /**
+     * 记录开始时间戳
+     * （索引文件中写入的第一条消息的在【CommitLog中的存储时间】）
+     */
+    private AtomicLong beginTimestamp = new AtomicLong(0);
+    //记录结束时间戳
+    private AtomicLong endTimestamp = new AtomicLong(0);
+
+    /**
+     *  记录开始的磁盘的offset(索引文件第一条消息在CommitLog文件中的offset)
+     */
+    private AtomicLong beginPhyOffset = new AtomicLong(0);
+    //记录写入磁盘的end offset（最后一条消息的offset，每写入一条更新一次）
+    private AtomicLong endPhyOffset = new AtomicLong(0);
+    //记录hash曹数量
+    private AtomicInteger hashSlotCount = new AtomicInteger(0);
+    //记录当前索引数量
     private AtomicInteger indexCount = new AtomicInteger(1);
 
     public IndexHeader(final ByteBuffer byteBuffer) {
@@ -55,6 +85,9 @@ public class IndexHeader {
         }
     }
 
+    /**
+     * 当一个IndexFile写满的时候，更新索引文件的头信息。然后刷入磁盘
+     */
     public void updateByteBuffer() {
         this.byteBuffer.putLong(beginTimestampIndex, this.beginTimestamp.get());
         this.byteBuffer.putLong(endTimestampIndex, this.endTimestamp.get());

@@ -22,11 +22,24 @@ import org.apache.rocketmq.common.message.MessageQueue;
 
 /**
  * Message lock,strictly ensure the single queue only one thread at a time consuming
+ *
+ * 消费队列锁：严格保证一个消费队列，一次只能由一个线程消费
  */
 public class MessageQueueLock {
+    /**
+     * 缓存的消费队列
+     * 其中：key：消费队列，value：上锁的对象
+     */
     private ConcurrentMap<MessageQueue, Object> mqLockTable =
         new ConcurrentHashMap<MessageQueue, Object>();
 
+    /**
+     * 获取上锁的对象。
+     *
+     * 上锁的本质来说，是锁定某个对象，此处获取该对象
+     * @param mq
+     * @return
+     */
     public Object fetchLockObject(final MessageQueue mq) {
         Object objLock = this.mqLockTable.get(mq);
         if (null == objLock) {

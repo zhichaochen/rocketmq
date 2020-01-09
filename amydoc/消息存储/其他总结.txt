@@ -1,0 +1,22 @@
+1、通过commit log offset，查找消息
+    1、通过该offset查找消息所在的MappedFile
+        其中：每个MappedFile 回记录，该文件的开始 offset：参数：fileFromOffset
+        结束offset ： fileFromOffset + 1G.
+
+    2、计算offset在该消息文件中的位置
+        offset % mappedFileSize
+
+    3、根据位置查找消息。
+        特别需要注意的是：默认会查询四条消息，也就是即使你只查一条，也会给你返回四条。
+            （这算是预查询的实现）
+        参考：
+            CommitLog#getMessage
+            MappedFile#selectMappedBuffer
+                该方法详细讲解slice的作用。
+
+        返回：SelectMappedBufferResult对象
+
+        切记：通过slice方法：得到的子ByteBuffer，表示原ByteBuffer中的一部分数据。
+        操作子ByteBuffer，就是操作子ByteBuffer 对应的原ByteBuffer中的那部分数据。
+
+    4、返回的ByteBuffer中的内容，就是这条消息的内容。

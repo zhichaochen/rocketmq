@@ -22,6 +22,9 @@ import java.io.InterruptedIOException;
 import java.util.Enumeration;
 import java.util.Vector;
 
+/**
+ * log拼接器
+ */
 public abstract class Appender {
 
     public static final int CODE_WRITE_FAILURE = 1;

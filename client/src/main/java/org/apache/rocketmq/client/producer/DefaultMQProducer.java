@@ -53,6 +53,8 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
  *
  * <p> <strong>Thread Safety:</strong> After configuring and starting process, this class can be regarded as thread-safe
  * and used among multiple threads context. </p>
+ *
+ * 生产者对象。
  */
 public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
@@ -95,6 +97,8 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * Maximum number of retry to perform internally before claiming sending failure in synchronous mode. </p>
      *
      * This may potentially cause message duplication which is up to application developers to resolve.
+     *
+     * 消息发送失败，重试次数。
      */
     private int retryTimesWhenSendFailed = 2;
 
@@ -264,9 +268,14 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * to invoke this method before sending or querying messages. </strong> </p>
      *
      * @throws MQClientException if there is any unexpected error.
+     *
+     * 启动生产者服务
      */
     @Override
     public void start() throws MQClientException {
+        /**
+         * 生产者组，可能使用了命名空间，在里面从SystemProperty中解析出该名称。
+         */
         this.setProducerGroup(withNamespace(this.producerGroup));
         this.defaultMQProducerImpl.start();
         if (null != traceDispatcher) {

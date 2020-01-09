@@ -18,20 +18,37 @@ package org.apache.rocketmq.store;
 
 import java.util.Map;
 
+/**
+ * 转发请求，
+ * 转发CommitLog中消息的位置信息，相当于数据库索引，加速从CommitLog中索引消息。
+ */
 public class DispatchRequest {
+    //主题
     private final String topic;
+    //消息队列
     private final int queueId;
+    //commitlog中的偏移量
     private final long commitLogOffset;
+    //消息大小
     private int msgSize;
+    //tagsCode
     private final long tagsCode;
+    //消息存储时间
     private final long storeTimestamp;
+    //消息在消费队列的offset
     private final long consumeQueueOffset;
+    //存放在消息属性中的keys: PROPERTY_KEYS = "KEYS"
     private final String keys;
+    // 是否成功
     private final boolean success;
+    // 息唯一键 "UNIQ_KEY"
     private final String uniqKey;
 
+    // 系统标志
     private final int sysFlag;
+    // 事务pre消息偏移量
     private final long preparedTransactionOffset;
+    //属性
     private final Map<String, String> propertiesMap;
     private byte[] bitMap;
 

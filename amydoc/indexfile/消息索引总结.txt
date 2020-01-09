@@ -1,0 +1,41 @@
+参考文章：https://blog.csdn.net/chongyi1940/article/details/100740669
+
+详情参考 IndexFile
+1、索引key = topic + 消息key
+2、索引的hash slot
+    等于 索引key hash之后，对500万进行求余。
+    占用四个字节，用来保存当时的 索引的数量。也可以理解为记录第多少个索引。
+
+    hash槽的后面记录索引的信息。
+
+3、索引位置
+    索引头 + hash槽的位置 * hash槽的size（四个字节） + hash槽的值（第多少个索引） * index size(一条索引 默认20个字节)
+
+    计算很合理，索引头只有一个，hash 槽会有多个，索引也会有多个。
+
+4、索引内容
+    this.mappedByteBuffer.putInt(absIndexPos, keyHash);
+    this.mappedByteBuffer.putLong(absIndexPos + 4, phyOffset);
+    this.mappedByteBuffer.putInt(absIndexPos + 4 + 8, (int) timeDiff);
+    this.mappedByteBuffer.putInt(absIndexPos + 4 + 8 + 4, slotValue);
+
+    1、索引key 的hash值
+    2、消息位置
+    3、时间差 ：存储的时间 - 创建索引文件的时间。
+    4、hash槽的值 ：也就是第多少条索引。
+
+5、如何查找到消息
+    1、IndexKey
+        一条消息key + topic是确定的，构成IndexKey
+
+    2、计算hash槽，及取出hash槽对应位置的值。
+        通过 IndexKey 的hash值，对500万进行求余，得到的值，就是hash 槽。
+        hash槽占用四个字节。哈氏槽 * 4 就等于hash槽所在的位置。
+        hash槽存储了，【这是第多少条索引】。
+
+    3、计算索引所在的位置。
+        索引头 + hash槽 * hash槽size + 哈氏槽存的值（第多少条索引） * 索引size
+
+        以上也就是索引的位置。索引再往后偏移四个字节，就是消息offset的位置了。
+
+    4、取出索引中记录的偏移量，就是消息在CommitLog中所在的位置。

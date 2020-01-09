@@ -67,11 +67,18 @@ public abstract class ConfigManager {
 
     public abstract void decode(final String jsonString);
 
+    /**
+     * 持久化配置
+     */
     public synchronized void persist() {
+        /**
+         * 将缓存中的配置，转换成json字符串
+         */
         String jsonString = this.encode(true);
         if (jsonString != null) {
             String fileName = this.configFilePath();
             try {
+                //将配置写入磁盘。
                 MixAll.string2File(jsonString, fileName);
             } catch (IOException e) {
                 log.error("persist file " + fileName + " exception", e);

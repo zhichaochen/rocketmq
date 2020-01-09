@@ -1,0 +1,42 @@
+总结：
+    消息在客户端发送的时候就知道 queueId 和 topic了，所以在这儿直接回去就行。
+
+1、概述
+    每个Broker都对应有一个MessageStore，专门用来存储发送到它的消息，
+    不过MessageStore本身不是文件，只是存储的一个抽象，
+    MessageStore 中保存着一个 CommitLog，CommitLog 维护了一个 MappedFileQueue，
+    而MappedFileQueue 中又维护了多个 MappedFile，每个MappedFile都会映射到文件系统中一个文件，
+    这些文件才是真正的存储消息的地方，MappedFile的文件名为它记录的第一条消息的全局物理偏移量。
+
+2、消息接收
+    SendMessageProcessor#sendBatchMessage
+
+
+3、消息存储
+   DefaultMessageStore#putMessages
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

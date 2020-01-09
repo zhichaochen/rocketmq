@@ -20,18 +20,37 @@ import org.apache.rocketmq.common.MixAll;
 
 import java.nio.charset.Charset;
 
+/**
+ * 事务消息工具类
+ */
 public class TransactionalMessageUtil {
+    /**
+     * 操作类型：d 表示删除
+     * REMOVETAG：删除标记
+     */
     public static final String REMOVETAG = "d";
     public static Charset charset = Charset.forName("utf-8");
 
+    /**
+     * 返回：RMQ_SYS_TRANS_OP_HALF_TOPIC
+     * @return
+     */
     public static String buildOpTopic() {
         return MixAll.RMQ_SYS_TRANS_OP_HALF_TOPIC;
     }
 
+    /**
+     * 返回 RMQ_SYS_TRANS_OP_HALF_TOPIC
+     * @return
+     */
     public static String buildHalfTopic() {
         return MixAll.RMQ_SYS_TRANS_HALF_TOPIC;
     }
 
+    /**
+     * 返回 CID_RMQ_SYS_TRANS
+     * @return
+     */
     public static String buildConsumerGroup() {
         return MixAll.CID_SYS_RMQ_TRANS;
     }

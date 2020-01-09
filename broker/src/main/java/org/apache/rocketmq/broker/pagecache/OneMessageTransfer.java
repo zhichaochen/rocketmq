@@ -23,6 +23,9 @@ import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 
+/**
+ *
+ */
 public class OneMessageTransfer extends AbstractReferenceCounted implements FileRegion {
     private final ByteBuffer byteBufferHeader;
     private final SelectMappedBufferResult selectMappedBufferResult;

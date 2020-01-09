@@ -18,11 +18,21 @@ package org.apache.rocketmq.broker.transaction;
 
 import org.apache.rocketmq.common.message.MessageExt;
 
+/**
+ * 一条事务消息
+ *
+ * 这条消息要么被提交，要么需要回滚。
+ */
 public class OperationResult {
+    /**
+     * 二阶段提交中的prepare阶段发送的消息
+     */
     private MessageExt prepareMessage;
 
+    //响应code
     private int responseCode;
 
+    //备注信息
     private String responseRemark;
 
     public MessageExt getPrepareMessage() {

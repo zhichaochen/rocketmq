@@ -63,6 +63,9 @@ import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
 import org.apache.rocketmq.remoting.exception.RemotingTooMuchRequestException;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
+/**
+ * Netty远程服务之服务端
+ */
 public class NettyRemotingServer extends NettyRemotingAbstract implements RemotingServer {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
     private final ServerBootstrap serverBootstrap;
@@ -73,6 +76,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     private final ExecutorService publicExecutor;
     private final ChannelEventListener channelEventListener;
 
+    /**
+     * 每秒调用一次
+     */
     private final Timer timer = new Timer("ServerHouseKeepingService", true);
     private DefaultEventExecutorGroup defaultEventExecutorGroup;
 
@@ -173,12 +179,19 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /**
+     * 是否使用Epoll
+     * @return
+     */
     private boolean useEpoll() {
         return RemotingUtil.isLinuxPlatform()
             && nettyServerConfig.isUseEpollNativeSelector()
             && Epoll.isAvailable();
     }
 
+    /**
+     * 启动 server 服务
+     */
     @Override
     public void start() {
         this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(
@@ -198,13 +211,23 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         ServerBootstrap childHandler =
             this.serverBootstrap.group(this.eventLoopGroupBoss, this.eventLoopGroupSelector)
                 .channel(useEpoll() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)
+                    //请求队列的最大长度，backlog：积压
                 .option(ChannelOption.SO_BACKLOG, 1024)
+                    //表示允许重复使用本地地址和端口，reuse addr ：重用地址
                 .option(ChannelOption.SO_REUSEADDR, true)
+                    //连接保活
                 .option(ChannelOption.SO_KEEPALIVE, false)
+                    //不延迟，不开启nagle处理。
                 .childOption(ChannelOption.TCP_NODELAY, true)
+                    //发送缓冲区的大小
                 .childOption(ChannelOption.SO_SNDBUF, nettyServerConfig.getServerSocketSndBufSize())
+                    //接收缓冲区的大小
                 .childOption(ChannelOption.SO_RCVBUF, nettyServerConfig.getServerSocketRcvBufSize())
+                    //表示监听端口。
                 .localAddress(new InetSocketAddress(this.nettyServerConfig.getListenPort()))
+                    /**
+                     * 当建立连接时，初始化通道。
+                     */
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     public void initChannel(SocketChannel ch) throws Exception {
@@ -349,6 +372,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         serverHandler = new NettyServerHandler();
     }
 
+    /**
+     * 握手处理器
+     */
     @ChannelHandler.Sharable
     class HandshakeHandler extends SimpleChannelInboundHandler<ByteBuf> {
 

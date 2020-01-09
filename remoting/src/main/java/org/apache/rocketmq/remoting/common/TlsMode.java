@@ -24,6 +24,11 @@ package org.apache.rocketmq.remoting.common;
  *     <li><strong>permissive:</strong> SSL is optional, aka, server in this mode can serve client connections with or without SSL;</li>
  *     <li><strong>enforcing:</strong> SSL is required, aka, non SSL connection will be rejected.</li>
  * </ol>
+ *
+ * 传输层安全协议
+ *  disabled禁用 ：不支持SSL；任何传入的SSL握手都将被拒绝，从而导致连接关闭
+ *  permissive允许的 : SSL是可选的，也就是说，此模式下的服务器可以使用或不使用SSL为客户端连接提供服务
+ *  enforcing 强制 ：需要SSL，也就是说，非SSL连接将被拒绝
  */
 public enum TlsMode {
 

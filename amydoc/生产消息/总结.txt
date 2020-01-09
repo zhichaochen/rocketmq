@@ -1,0 +1,13 @@
+消息的发布与订阅基于topic,路由发布信息以 topic 维度进行描述。
+
+消息发送者在同一时刻持有 NameServer 集群中的一个连接，用来及时获取 broker 等信息（topic路由信息），
+每一个 Topic的队列分散在不同的 Broker上，默认 topic在Broker 中对应4个发送队列，4个消息队列。
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,4 @@
+1、CRC-知识解析 cyclic redundancy check
+    为了保证数据的正确，就不得不采用检错的手段。
+    作用：为了检验数据的正确性。
+    参考：https://www.cnblogs.com/masonzhang/p/10261855.html

@@ -1,0 +1,105 @@
+参考文章：https://my.oschina.net/u/3180962/blog/3064148
+一、Java的IO读写大致分为三种：
+
+1、普通IO(java.io)
+
+        例如FileWriter、FileReader等，普通IO是传统字节传输方式，读写慢阻塞，单向一个Read对应一个Write
+
+
+2、文件通道FileChannel(java.nio)
+
+​
+FileChannel fileChannel = new RandomAccessFile(new File("data.txt"), "rw").getChannel()
+​
+全双工通道，采用内存缓冲区ByteBuffer且是线程安全的
+
+使用FileChannel为什么会比普通IO快？
+    一般情况FileChannel在一次写入4kb的整数倍数时，才能发挥出实际的性能，益于FileChannel采用了ByteBuffer这样的内存缓冲区。这样可以精准控制写入磁盘的大小，这是普通IO无法实现
+
+FileChannel是直接把ByteBuffer的数据直接写入磁盘？
+    ByteBuffer 中的数据和磁盘中的数据还隔了一层，这一层便是 PageCache，是用户内存和磁盘之间的一层缓存。我们都知道磁盘 IO 和内存 IO 的速度可是相差了好几个数量级。我们可以认为 filechannel.write 写入 PageCache 便是完成了落盘操作，但实际上，操作系统最终帮我们完成了 PageCache 到磁盘的最终写入，理解了这个概念，你就应该能够理解 FileChannel 为什么提供了一个 force() 方法，用于通知操作系统进行及时的刷盘，同理使用FileChannel时同样经历磁盘->PageCache->用户内存三个阶段
+
+
+3、内存映射MMAP(java.nio)
+
+​
+MappedByteBuffer mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, position, fileSize)
+​
+mmap 把文件映射到用户空间里的虚拟内存，省去了从内核缓冲区复制到用户空间的过程，文件中的位置在虚拟内存中有了对应的地址，可以像操作内存一样操作这个文件，相当于已经把整个文件放入内存，但在真正使用到这些数据前却不会消耗物理内存，也不会有读写磁盘的操作，只有真正使用这些数据时，也就是图像准备渲染在屏幕上时，虚拟内存管理系统 VMS
+
+
+MMAP 并非是文件 IO 的银弹，它只有在一次写入很小量数据的场景下才能表现出比 FileChannel 稍微优异的性能。紧接着我还要告诉你一些令你沮丧的事，至少在 JAVA 中使用 MappedByteBuffer 是一件非常麻烦并且痛苦的事，主要表现为三点：
+
+MMAP 使用时必须实现指定好内存映射的大小，并且一次 map 的大小限制在 1.5G 左右，重复 map 又会带来虚拟内存的回收、重新分配的问题，对于文件不确定大小的情形实在是太不友好了。
+
+MMAP 使用的是虚拟内存，和 PageCache 一样是由操作系统来控制刷盘的，虽然可以通过 force() 来手动控制，但这个时间把握不好，在小内存场景下会很令人头疼。
+
+MMAP 的回收问题，当 MappedByteBuffer 不再需要时，可以手动释放占用的虚拟内存，但…方式非常的诡异
+
+
+
+二、OS的PageCache机制
+
+PageCache是OS对文件的缓存，用于加速对文件的读写。一般来说，程序对文件进行顺序读写的速度几乎接近于内存的读写访问，这里的主要原因就是在于OS使用PageCache机制对读写访问操作进行了性能优化，将一部分的内存用作PageCache
+1、对于数据文件的读取
+
+如果一次读取文件时出现未命中（cache miss）PageCache的情况，OS从物理磁盘上访问读取文件的同时，会顺序对其他相邻块的数据文件进行预读取（ps：顺序读入紧随其后的少数几个页面）。这样，只要下次访问的文件已经被加载至PageCache时，读取操作的速度基本等于访问内存
+
+
+1、对于数据文件的写入
+
+    OS会先写入至Cache内，随后通过异步的方式由pdflush内核线程将Cache内的数据刷盘至物理磁盘上
+    对于文件的顺序读写操作来说，读和写的区域都在OS的PageCache内，此时读写性能接近于内存。RocketMQ的大致做法是，
+    将数据文件映射到OS的虚拟内存中（通过JDK NIO的MappedByteBuffer），写消息的时候首先写入PageCache，
+    并通过异步刷盘的方式将消息批量的做持久化（同时也支持同步刷盘）；订阅消费消息时（对CommitLog操作是随机读取），
+    由于PageCache的局部性热点原理且整体情况下还是从旧到新的有序读，因此大部分情况下消息还是可以直接
+    从Page Cache（cache hit）中读取，不会产生太多的缺页（Page Fault）中断而从磁盘读取
+
+
+    PageCache机制也不是完全无缺点的，当遇到OS进行脏页回写，内存回收，内存swap等情况时，就会引起较大的消息读写延迟
+    对于这些情况，RocketMQ采用了多种优化技术，比如内存预分配，文件预热，mlock系统调用等，
+    来保证在最大可能地发挥PageCache机制优点的同时，尽可能地减少其缺点带来的消息读写延迟
+
+2、
+
+三、RocketMQ存储优化技术
+    对于RocketMQ来说，它是把内存映射文件串联起来，组成了链表；
+    因为内存映射文件本身大小有限制，只能是2G（默认1G）；
+    所以需要把多个内存映射文件串联成一个链表；
+    这里介绍RocketMQ存储层采用的几项优化技术方案在一定程度上可以减少PageCache的缺点带来的影响，
+    主要包括内存预分配，文件预热和mlock系统调用
+
+1、预分配MappedFile
+    在消息写入过程中（调用CommitLog的putMessage()方法），CommitLog会先从MappedFileQueue队列中获取一个
+     MappedFile，如果没有就新建一个；
+
+     这里，MappedFile的创建过程是将构建好的一个AllocateRequest请求（具体做法是，
+     将下一个文件的路径、下下个文件的路径、文件大小为参数封装为AllocateRequest对象）添加至队列中，
+     后台运行的AllocateMappedFileService服务线程（在Broker启动时，该线程就会创建并运行），
+     会不停地run，只要请求队列里存在请求，就会去执行MappedFile映射文件的创建和预分配工作，
+     分配的时候有两种策略，一种是使用Mmap的方式来构建MappedFile实例，另外一种是从TransientStorePool
+     堆外内存池中获取相应的DirectByteBuffer来构建MappedFile（ps：具体采用哪种策略，也与刷盘的方式有关）。
+     并且，在创建分配完下个MappedFile后，还会将下下个MappedFile预先创建并保存至请求队列中等待下次获取时直接返回。
+
+
+     RocketMQ中预分配MappedFile的设计非常巧妙，下次获取时候直接返回就可以不用等待MappedFile创建分配所产生的时间延迟
+
+2、文件预热&&mlock系统调用（TransientStorePool）
+
+    1、mlock系统调用
+        其可以将进程使用的部分或者全部的地址空间锁定在物理内存中，防止其被交换到swap空间。
+        对于RocketMQ这种的高吞吐量的分布式消息队列来说，追求的是消息读写低延迟，
+        那么肯定希望尽可能地多使用物理内存，提高数据读写访问的操作效率。
+
+    2、文件预热
+        预热的目的主要有两点；
+
+        第一点，由于仅分配内存并进行mlock系统调用后并不会为程序完全锁定这些内存，因为其中的分页可能是写时复制的。
+        因此，就有必要对每个内存页面中写入一个假的值。
+
+        其中，RocketMQ是在创建并分配MappedFile的过程中，预先写入一些随机值至Mmap映射出的内存空间里。
+        第二，调用Mmap进行内存映射后，OS只是建立虚拟内存地址至物理地址的映射表，而实际并没有加载任何文件至内存中。
+        程序要访问数据时OS会检查该部分的分页是否已经在内存中，如果不在，则发出一次缺页中断。
+        这里，可以想象下1G的CommitLog需要发生多少次缺页中断，才能使得对应的数据才能完全加载至物理内存中
+        （ps：X86的Linux中一个标准页面大小是4KB）？RocketMQ的做法是，在做Mmap内存映射的同时进行
+        madvise系统调用，目的是使OS做一次内存映射后对应的文件数据尽可能多的预加载至内存中，从而达到内存预热的效果

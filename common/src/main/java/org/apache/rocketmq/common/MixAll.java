@@ -123,6 +123,14 @@ public class MixAll {
         return DLQ_GROUP_TOPIC_PREFIX + consumerGroup;
     }
 
+    /**
+     * 安排VIP通道，默认的端口号 -2
+     * 默认的端口号是8888，vip的端口号是8886
+     *
+     * @param isChange
+     * @param brokerAddr
+     * @return
+     */
     public static String brokerVIPChannel(final boolean isChange, final String brokerAddr) {
         if (isChange) {
             int split = brokerAddr.lastIndexOf(":");
@@ -148,6 +156,12 @@ public class MixAll {
         return 0;
     }
 
+    /**
+     * 将jsonString 转化成 File。
+     * @param str
+     * @param fileName
+     * @throws IOException
+     */
     public static void string2File(final String str, final String fileName) throws IOException {
 
         String tmpFile = fileName + ".tmp";
@@ -156,6 +170,7 @@ public class MixAll {
         String bakFile = fileName + ".bak";
         String prevContent = file2String(fileName);
         if (prevContent != null) {
+            //将数据写入磁盘
             string2FileNotSafe(prevContent, bakFile);
         }
 
@@ -166,6 +181,12 @@ public class MixAll {
         file.renameTo(new File(fileName));
     }
 
+    /**
+     * 将数据写入磁盘
+     * @param str
+     * @param fileName
+     * @throws IOException
+     */
     public static void string2FileNotSafe(final String str, final String fileName) throws IOException {
         File file = new File(fileName);
         File fileParent = file.getParentFile();
@@ -191,6 +212,12 @@ public class MixAll {
         return file2String(file);
     }
 
+    /**
+     * 将文件转化成字符串
+     * @param file
+     * @return
+     * @throws IOException
+     */
     public static String file2String(final File file) throws IOException {
         if (file.exists()) {
             byte[] data = new byte[(int) file.length()];

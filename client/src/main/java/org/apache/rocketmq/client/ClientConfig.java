@@ -35,7 +35,12 @@ import org.apache.rocketmq.remoting.protocol.LanguageCode;
 public class ClientConfig {
     public static final String SEND_MESSAGE_WITH_VIP_CHANNEL_PROPERTY = "com.rocketmq.sendMessageWithVIPChannel";
     private String namesrvAddr = NameServerAddressUtils.getNameServerAddresses();
+
+    //客户端IP 地址
     private String clientIP = RemotingUtil.getLocalAddress();
+    /**
+     * 生产者实例名称，如果是DEFAULT，会被转化成 PID（进程Id）
+     */
     private String instanceName = System.getProperty("rocketmq.client.name", "DEFAULT");
     private int clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors();
     protected String namespace;
@@ -47,6 +52,7 @@ public class ClientConfig {
     private int pollNameServerInterval = 1000 * 30;
     /**
      * Heartbeat interval in microseconds with message broker
+     * 客户端与broker的心跳检测，默认30s
      */
     private int heartbeatBrokerInterval = 1000 * 30;
     /**
@@ -56,12 +62,22 @@ public class ClientConfig {
     private long pullTimeDelayMillsWhenException = 1000;
     private boolean unitMode = false;
     private String unitName;
+    /**
+     * 是否是vip，也就是有优先发送权。
+     */
     private boolean vipChannelEnabled = Boolean.parseBoolean(System.getProperty(SEND_MESSAGE_WITH_VIP_CHANNEL_PROPERTY, "false"));
-
+    /**
+     * 是否启用TLS
+     */
     private boolean useTLS = TlsSystemConfig.tlsEnable;
 
+    //表示Java语言
     private LanguageCode language = LanguageCode.JAVA;
 
+    /**
+     * 构建客户端ID ： IP + @ + 实例名（进程号）
+     * @return
+     */
     public String buildMQClientId() {
         StringBuilder sb = new StringBuilder();
         sb.append(this.getClientIP());
@@ -92,6 +108,9 @@ public class ClientConfig {
         this.instanceName = instanceName;
     }
 
+    /**
+     * 将实例名转化为进程Id
+     */
     public void changeInstanceNameToPID() {
         if (this.instanceName.equals("DEFAULT")) {
             this.instanceName = String.valueOf(UtilAll.getPid());

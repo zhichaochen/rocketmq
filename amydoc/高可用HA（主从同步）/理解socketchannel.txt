@@ -1,0 +1,29 @@
+1、read(ByteBuffer)
+    ByteBuffer 满了之后，怎么办？socket怎么处理
+
+2、ByteBuffer hasRemaining()
+    源码：return position < limit;
+
+    当写的时候，有剩余表示缓存还没有写满
+    当读的时候，有剩余表示缓存还没有读完
+    因为在读之前会调用flip，将position 设置成0
+
+3、将设置成写模式
+    参考：HAService#reportSlaveMaxOffset
+
+    【在socket写的时候，会从ByteBuffer读取数据】，所以这个时候，需要将ByteBuffer设置成读模式。
+        /**
+         * ByteBuffer写入八个字节的
+         */
+        this.reportOffset.position(0);
+        this.reportOffset.limit(8);
+        this.reportOffset.putLong(maxOffset);
+
+        /**
+         * 手动将ByteBuffer设置成读模式，相当于flip。
+         */
+        this.reportOffset.position(0);
+        this.reportOffset.limit(8);
+
+        //socket写
+        this.socketChannel.write(this.reportOffset);

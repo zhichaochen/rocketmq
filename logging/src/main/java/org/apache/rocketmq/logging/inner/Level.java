@@ -19,6 +19,9 @@ package org.apache.rocketmq.logging.inner;
 
 import java.io.Serializable;
 
+/**
+ * 日志等级
+ */
 public class Level implements Serializable {
 
     transient int level;

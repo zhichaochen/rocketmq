@@ -59,6 +59,9 @@ import static org.apache.rocketmq.remoting.netty.TlsSystemConfig.tlsServerNeedCl
 import static org.apache.rocketmq.remoting.netty.TlsSystemConfig.tlsServerTrustCertPath;
 import static org.apache.rocketmq.remoting.netty.TlsSystemConfig.tlsTestModeEnable;
 
+/**
+ * TLS 处理
+ */
 public class TlsHelper {
 
     public interface DecryptionStrategy {
@@ -88,6 +91,13 @@ public class TlsHelper {
         TlsHelper.decryptionStrategy = decryptionStrategy;
     }
 
+    /**
+     *
+     * @param forClient
+     * @return
+     * @throws IOException
+     * @throws CertificateException
+     */
     public static SslContext buildSslContext(boolean forClient) throws IOException, CertificateException {
         File configFile = new File(TlsSystemConfig.tlsConfigFile);
         extractTlsConfigFromFile(configFile);

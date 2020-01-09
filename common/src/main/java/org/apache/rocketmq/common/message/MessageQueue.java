@@ -18,10 +18,21 @@ package org.apache.rocketmq.common.message;
 
 import java.io.Serializable;
 
+/**
+ * 消息队列
+ * 一个topic下，包含多个queue。
+ *
+ * MessageQueue 对象，在各个端，根据需要创建的，queueId就是 从 0 到 最大，自动生成的。
+ * 故而，只要知道每个broker创建几个队列就可以了。
+ *
+ */
 public class MessageQueue implements Comparable<MessageQueue>, Serializable {
     private static final long serialVersionUID = 6191200464116433425L;
+    //主题
     private String topic;
+    //broker名称
     private String brokerName;
+    //队列Id。
     private int queueId;
 
     public MessageQueue() {
@@ -97,6 +108,15 @@ public class MessageQueue implements Comparable<MessageQueue>, Serializable {
         return "MessageQueue [topic=" + topic + ", brokerName=" + brokerName + ", queueId=" + queueId + "]";
     }
 
+    /**
+     * 排序规则，
+     *      首先根据topic排序，
+     *      topic相等的话，根据broker排序
+     *      topic，broker都相等的话，根据queueId排序
+     *
+     * @param o
+     * @return
+     */
     @Override
     public int compareTo(MessageQueue o) {
         {

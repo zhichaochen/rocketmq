@@ -38,11 +38,18 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
 
 /**
  * Remote storage implementation
+ *
+ * 集群模式消费进度存储
  */
 public class RemoteBrokerOffsetStore implements OffsetStore {
     private final static InternalLogger log = ClientLogger.getLog();
+    // MQ客户端实例，该实例被同一个客户端的消费者、生产者共用
     private final MQClientInstance mQClientFactory;
+    //MQ消费组
     private final String groupName;
+    /**
+     * 缓存消费进度offset
+     */
     private ConcurrentMap<MessageQueue, AtomicLong> offsetTable =
         new ConcurrentHashMap<MessageQueue, AtomicLong>();
 
@@ -55,15 +62,27 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
     public void load() {
     }
 
+    /**
+     * 更新Offset（消费成功后，会更新offset）
+     * 参见：ConsumeMessageConcurrentlyService#processConsumeResult
+     *
+     * @param mq
+     * @param offset
+     * @param increaseOnly
+     */
     @Override
     public void updateOffset(MessageQueue mq, long offset, boolean increaseOnly) {
         if (mq != null) {
+            //如果没有存储，则缓存
             AtomicLong offsetOld = this.offsetTable.get(mq);
             if (null == offsetOld) {
                 offsetOld = this.offsetTable.putIfAbsent(mq, new AtomicLong(offset));
             }
-
+            /**
+             * 如果offsetOld不为空，这里如果不为空，说明同时对一个MQ消费队列进行消费，并发执行。
+             */
             if (null != offsetOld) {
+                //根据 increaseOnly 更新原先的 offsetOld 的值。
                 if (increaseOnly) {
                     MixAll.compareAndIncreaseOnly(offsetOld, offset);
                 } else {
@@ -73,6 +92,13 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
         }
     }
 
+    /**
+     * 读取消费队列的消费进度。
+     *
+     * @param mq
+     * @param type
+     * @return
+     */
     @Override
     public long readOffset(final MessageQueue mq, final ReadOffsetType type) {
         if (mq != null) {
@@ -88,6 +114,9 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
                 }
                 case READ_FROM_STORE: {
                     try {
+                        /**
+                         * 从磁盘中读取消费进度，核心入口方法：fetchConsumeOffsetFromBroker。
+                         */
                         long brokerOffset = this.fetchConsumeOffsetFromBroker(mq);
                         AtomicLong offset = new AtomicLong(brokerOffset);
                         this.updateOffset(mq, offset.get(), false);
@@ -147,11 +176,20 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
         }
     }
 
+    /**
+     * 持久化mq的offset
+     *
+     * @param mq
+     */
     @Override
     public void persist(MessageQueue mq) {
+        //获取消息offset
         AtomicLong offset = this.offsetTable.get(mq);
         if (offset != null) {
             try {
+                /**
+                 * 去broker更新对列的offset。
+                 */
                 this.updateConsumeOffsetToBroker(mq, offset.get());
                 log.info("[persist] Group: {} ClientId: {} updateConsumeOffsetToBroker {} {}",
                     this.groupName,
@@ -164,8 +202,14 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
         }
     }
 
+    /**
+     * 删除消费队列及其偏移量
+     *
+     * @param mq
+     */
     public void removeOffset(MessageQueue mq) {
         if (mq != null) {
+            //删除
             this.offsetTable.remove(mq);
             log.info("remove unnecessary messageQueue offset. group={}, mq={}, offsetTableSize={}", this.groupName, mq,
                 offsetTable.size());
@@ -224,8 +268,18 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
         }
     }
 
+    /**
+     * 从Broker读取消费进度
+     * @param mq
+     * @return
+     * @throws RemotingException
+     * @throws MQBrokerException
+     * @throws InterruptedException
+     * @throws MQClientException
+     */
     private long fetchConsumeOffsetFromBroker(MessageQueue mq) throws RemotingException, MQBrokerException,
         InterruptedException, MQClientException {
+        //根据broker名称找到broker地址。
         FindBrokerResult findBrokerResult = this.mQClientFactory.findBrokerAddressInAdmin(mq.getBrokerName());
         if (null == findBrokerResult) {
 

@@ -1,0 +1,39 @@
+参考：https://www.jianshu.com/p/ca1266330ed9
+
+Broker的功能主要包含如下几点：
+    接收Producer发送的消息
+    存储消息
+    回复consumer的消息拉取请求
+    master-slave之间的数据同步
+    提供查询消息的接口
+
+Broker核心类
+    1、数据管理类
+      Broker配置数据的缓存类，所有数据都以本地文件的方式存在broker上，同时会缓存全量数据在内存中。
+      TopicConfigManager：管理所有broker上存在的topic以及queue的信息。topic的数据会定时和nameserv做同步，以更新Nameserv上的topic路由信息。
+      ConsumeOffsetManager ：管理每个consumer group消息消费的进度。Cluster的consumer会在消息消费成功后把offset信息同步给broker
+      ProducerManager：producer客户端信息
+      ConsumerManager：consumer客户端信息
+      ConsumerFilterManager：consumer filter server信息
+      SubscriptionGroupManager：consumer订阅信息
+
+    2、请求processor
+      客户端请求处理类，处理消息请求、配置及控制命令请求，最核心的就是SendMessageProcessor和PullMessageProcessor,一个收producer消息，一个将消息response给consumer。
+      SendMessageProcessor：接收Producer发来的消息，调用存储模块存储
+      PullMessageProcessor ：接受Consumer的消息Pull请求，返回符合条件的消息
+      QueryMessageProcessor：接受历史消息查询请求，支持按Msg ID、Msg Key和时间段查询消息详情
+      AdminBrokerProcessor：接受管理命令，如topic创建等
+
+    3、MessageStore
+        消息存储接口，这个是Broker的核心，提供消息读写。
+        CommitLog：消息详情存储，同一个broker上的所有消息都保存在一起，每条消息保存后都会有一个offset
+        ConsumeQueue：按topic和queue存储消息，相同topic和queue的消息存储在一起，内容是commitLog的offset。consumer是按照queue来拉取消息的，所以都是先读取consumeQueue拿到offset的列表，然后到commitLog读取消息详情
+        IndexService：CommitLog的索引文件，通过对Msg Key创建索引文件，来快速的定位消息。
+        ReputMessageService：负责读取CommitLog文件中的消息，分发给ConsumeQueue和IndexService构建Queue和索引文件
+        HAService：负责消息的主从同步，对于master来说，管理所有slave并发送新的消息数据给slave
+
+    4、SlaveSynchronize
+        负责同步broker配置数据，不会同步消息数据。
+
+    5、PullRequestHoldService
+        对于PushConsumer，当读取的时候没有发现消息，该类会暂时hold住请求，当有新的消息到达的时候，再回复请求。

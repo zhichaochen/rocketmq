@@ -25,9 +25,22 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.store.config.BrokerRole;
 import org.apache.rocketmq.store.config.StorePathConfigHelper;
 
+/**
+ * 表示一个消费队列，一个topic包含多个队列。
+ *
+ * 一个消息队列对应一个ConsumeQueue文件，【每个消费队列文件记录了自己【要消费的数据的位置】。】
+ *
+ * 其中：CQ 是ConsumeQueue 的简称
+ */
 public class ConsumeQueue {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
-
+    /**
+     * 记录消息位置信息，默认20个字节
+     * 其中：
+     *      一个long：记录：消息的总偏移量，也就是某条消息，开始写入的位置。
+     *      一个int：记录某条消息的长度。
+     *      一个long：记录 tag。
+     */
     public static final int CQ_STORE_UNIT_SIZE = 20;
     private static final InternalLogger LOG_ERROR = InternalLoggerFactory.getLogger(LoggerName.STORE_ERROR_LOGGER_NAME);
 
@@ -38,9 +51,19 @@ public class ConsumeQueue {
     private final int queueId;
     private final ByteBuffer byteBufferIndex;
 
+    //消息位置信息的存储目录。
     private final String storePath;
     private final int mappedFileSize;
+    /**
+     * write之后，的最大偏移量，
+     * 记录【所有消息的最大偏移量】。
+     */
     private long maxPhysicOffset = -1;
+    /**
+     * 记录消息目录中，最小的offset。
+     * 因为消息文件过期会被删除，所以消息文件很有可能不是从00...000开始的。
+     * minLogicOffset ：就是记录当前目录中最小的offset。
+     */
     private volatile long minLogicOffset = 0;
     private ConsumeQueueExt consumeQueueExt = null;
 
@@ -76,6 +99,11 @@ public class ConsumeQueue {
         }
     }
 
+    /**
+     * 加载mappedFileQueue文件到内存
+     * 如果拓展文件可读，接着加载ConsumeQueueExt
+     * @return
+     */
     public boolean load() {
         boolean result = this.mappedFileQueue.load();
         log.info("load consume queue " + this.topic + "-" + this.queueId + " " + (result ? "OK" : "Failed"));
@@ -85,6 +113,12 @@ public class ConsumeQueue {
         return result;
     }
 
+    /**
+     * 用于设定maxPhysicOffset以及更新最后三个mappedFile的flush,commitPosition
+     * 1.从前往后读取最后三个mappedFile，依次读取记录，如果有效，更新maxPhysicOffset以及maxExtAddr
+     * 2.出现第一个无效记录的位置记为processOffset，设置flush,commitPosition，清除mappedFileQueue之后的记录
+     * 3.如果开启ext，清除maxExtAddr之后的记录
+     */
     public void recover() {
         final List<MappedFile> mappedFiles = this.mappedFileQueue.getMappedFiles();
         if (!mappedFiles.isEmpty()) {
@@ -152,6 +186,11 @@ public class ConsumeQueue {
         }
     }
 
+    /**
+     * 找到消息发送时间最接近timestamp逻辑队列的offset
+     * @param timestamp
+     * @return
+     */
     public long getOffsetInQueueByTime(final long timestamp) {
         MappedFile mappedFile = this.mappedFileQueue.getMappedFileByTime(timestamp);
         if (mappedFile != null) {
@@ -221,6 +260,17 @@ public class ConsumeQueue {
         return 0;
     }
 
+    /**
+     * 删除phyOffet之后的脏文件(包括同mappedFile之后记录,通过修改wrotePosition保证)
+     * 如果开启ext，找到maxExtAddr，把ext的脏文件也删除掉
+     *
+     * 1:依次处理最后一个，倒数第二个MappedFile。。。
+     * 2.每个文件从第一个数据块开始解析，如果超过phyOffet就，就删掉该文件
+     * 3.否则该文件继续遍历后续记录，不断修改wrote,commit和flushPosition,直到遍历结束或者数据块大小为空则返回
+     * 4.如果所有mappedFile都删完了，再truncateByMaxAddress
+     *
+     * 这里其实return的地方都要truncateByMaxAddress的？要不然更新maxExtAddr干啥
+     */
     public void truncateDirtyLogicFiles(long phyOffet) {
 
         int logicFileSize = this.mappedFileSize;
@@ -291,6 +341,15 @@ public class ConsumeQueue {
         }
     }
 
+    /**
+     * 获得最后偏移:
+     * 1.获得最后一个mappedFile
+     * 2.找到写的最后一条记录(wrotePosition - 20)
+     * 3.依次向后读每一条记录，如果有效，读出offset和size，记录lastOffset = offset + size
+     * 4.返回lastOffset
+     *
+     * ???为什么已经是最后一条记录了，还要向后遍历来确认
+     */
     public long getLastOffset() {
         long lastOffset = -1;
 
@@ -336,6 +395,15 @@ public class ConsumeQueue {
         return cnt;
     }
 
+    /**
+     * 修正minLogicOffset，如果ext开启了，把旧的mappedFile都删掉
+     * 找到第一个mappedFile,遍历每一条记录，得到记录的offsetPy 以及 tagsCode
+     * 如果offsetPy >= phyMinOffset, 更新minLogicOffset = 该条记录的offset
+     * 此时tagsCode如果是ext的就记录minExtAddr，用于清除ext的mappedFile
+     *
+     * 为什么只清除第一个文件:
+     * 因为minLogicOffset只会和第一个mappedFile有关
+     */
     public void correctMinOffset(long phyMinOffset) {
         MappedFile mappedFile = this.mappedFileQueue.getFirstMappedFile();
         long minExtAddr = 1;
@@ -376,12 +444,27 @@ public class ConsumeQueue {
         return this.minLogicOffset / CQ_STORE_UNIT_SIZE;
     }
 
+    /**
+     * 存放消息的位置信息。
+     *
+     * rocketmq中有专门的文件存储消息的位置信息，
+     * 相当于数据库的索引，加速从CommitLog中查找消息位置。
+     *
+     * @param request
+     */
     public void putMessagePositionInfoWrapper(DispatchRequest request) {
         final int maxRetries = 30;
+        //判断 ConsumeQueue 是否可写。
         boolean canWrite = this.defaultMessageStore.getRunningFlags().isCQWriteable();
         for (int i = 0; i < maxRetries && canWrite; i++) {
+            /**
+             * 消息tag
+             */
             long tagsCode = request.getTagsCode();
             if (isExtWriteEnable()) {
+                /**
+                 * 记录扩展单元
+                 */
                 ConsumeQueueExt.CqExtUnit cqExtUnit = new ConsumeQueueExt.CqExtUnit();
                 cqExtUnit.setFilterBitMap(request.getBitMap());
                 cqExtUnit.setMsgStoreTime(request.getStoreTimestamp());
@@ -395,9 +478,19 @@ public class ConsumeQueue {
                         topic, queueId, request.getCommitLogOffset());
                 }
             }
+            /**
+             * 将位置信息写入 消息队列文件。
+             */
             boolean result = this.putMessagePositionInfo(request.getCommitLogOffset(),
                 request.getMsgSize(), tagsCode, request.getConsumeQueueOffset());
+
+            /**
+             * 消息位置保存成功
+             */
             if (result) {
+                /**
+                 * 一种高可用的机制，后面详解。
+                 */
                 if (this.defaultMessageStore.getMessageStoreConfig().getBrokerRole() == BrokerRole.SLAVE ||
                     this.defaultMessageStore.getMessageStoreConfig().isEnableDLegerCommitLog()) {
                     this.defaultMessageStore.getStoreCheckpoint().setPhysicMsgTimestamp(request.getStoreTimestamp());
@@ -419,9 +512,21 @@ public class ConsumeQueue {
 
         // XXX: warn and notify me
         log.error("[BUG]consume queue can not write, {} {}", this.topic, this.queueId);
+        /**
+         *
+         */
         this.defaultMessageStore.getRunningFlags().makeLogicsQueueError();
     }
 
+    /**
+     * 写入消息位置信息。
+     *
+     * @param offset
+     * @param size
+     * @param tagsCode
+     * @param cqOffset
+     * @return
+     */
     private boolean putMessagePositionInfo(final long offset, final int size, final long tagsCode,
         final long cqOffset) {
 
@@ -429,36 +534,65 @@ public class ConsumeQueue {
             log.warn("Maybe try to build consume queue repeatedly maxPhysicOffset={} phyOffset={}", maxPhysicOffset, offset);
             return true;
         }
-
+        /**
+         * flip:回到0的位置，并且设置limit = 20个字节。
+         *
+         * 在文件的开头的20个字节中，记录如下信息。
+         * offset ：commitLog的总的offset
+         * size ：记录消息的长度
+         * tagsCode ：消息的tag。
+         * cqOffset ：消费队列的offset。
+         *      也表示这是是第多少条消息，因为一条消息记录一个消息位置。
+         */
         this.byteBufferIndex.flip();
         this.byteBufferIndex.limit(CQ_STORE_UNIT_SIZE);
         this.byteBufferIndex.putLong(offset);
         this.byteBufferIndex.putInt(size);
         this.byteBufferIndex.putLong(tagsCode);
-
+        /**
+         * 期待的逻辑偏移量。（所有消息的。）
+         * 也就是【消息的信息】将要写入的位置。
+         */
         final long expectLogicOffset = cqOffset * CQ_STORE_UNIT_SIZE;
 
+        /**
+         * 获取最新的文件，如果没有的话，创建并缓存
+         */
         MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile(expectLogicOffset);
         if (mappedFile != null) {
-
+            /**
+             * 是第一个文件，但是文件的offset不是0, 表示消息过期被删除。
+             */
             if (mappedFile.isFirstCreateInQueue() && cqOffset != 0 && mappedFile.getWrotePosition() == 0) {
+                //记录当前消息目录中最小的offset，有的文件过期被删除。
                 this.minLogicOffset = expectLogicOffset;
+                //记录需要刷盘的位置
                 this.mappedFileQueue.setFlushedWhere(expectLogicOffset);
+                //记录提交的位置
                 this.mappedFileQueue.setCommittedWhere(expectLogicOffset);
+                /**
+                 * 在逻辑位置之前，写入0，也就是写入空白字段。
+                 */
                 this.fillPreBlank(mappedFile, expectLogicOffset);
                 log.info("fill pre blank space " + mappedFile.getFileName() + " " + expectLogicOffset + " "
                     + mappedFile.getWrotePosition());
             }
 
             if (cqOffset != 0) {
+                //当前文件的写入消息的位置。
                 long currentLogicOffset = mappedFile.getWrotePosition() + mappedFile.getFileFromOffset();
-
+                /**
+                 * 期待写入的 offset < 当前的offset，表示如果要写的话，会有一部分消息被覆盖的。
+                 */
                 if (expectLogicOffset < currentLogicOffset) {
                     log.warn("Build  consume queue repeatedly, expectLogicOffset: {} currentLogicOffset: {} Topic: {} QID: {} Diff: {}",
                         expectLogicOffset, currentLogicOffset, this.topic, this.queueId, expectLogicOffset - currentLogicOffset);
                     return true;
                 }
-
+                /**
+                 * 不小于，也不等于，表示大于currentLogicOffset，
+                 * 表示消息文件中，会有一部分空白。打印一条日志
+                 */
                 if (expectLogicOffset != currentLogicOffset) {
                     LOG_ERROR.warn(
                         "[BUG]logic queue order maybe wrong, expectLogicOffset: {} currentLogicOffset: {} Topic: {} QID: {} Diff: {}",
@@ -470,18 +604,31 @@ public class ConsumeQueue {
                     );
                 }
             }
+            /**
+             * 表示期待写入的位置，恰好是当前记录的写入的位置。
+             *
+             * 记录所有文件的最大的offset
+             */
             this.maxPhysicOffset = offset + size;
+            //写入消息。
             return mappedFile.appendMessage(this.byteBufferIndex.array());
         }
         return false;
     }
 
+    /**
+     * 在mappedFile中，填充前置的blank数据, 一直到untilWhere这个位置
+     * @param mappedFile
+     * @param untilWhere
+     */
     private void fillPreBlank(final MappedFile mappedFile, final long untilWhere) {
         ByteBuffer byteBuffer = ByteBuffer.allocate(CQ_STORE_UNIT_SIZE);
         byteBuffer.putLong(0L);
         byteBuffer.putInt(Integer.MAX_VALUE);
         byteBuffer.putLong(0L);
-
+        /**
+         * 填充空白数据，直到untilWhere位置，每20个字节执行一次写入（调用write方法）。
+         */
         int until = (int) (untilWhere % this.mappedFileQueue.getMappedFileSize());
         for (int i = 0; i < until; i += CQ_STORE_UNIT_SIZE) {
             mappedFile.appendMessage(byteBuffer.array());

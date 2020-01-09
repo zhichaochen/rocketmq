@@ -21,6 +21,9 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
 /**
  * Common remoting command processor
+ *
+ * 请求处理器接口，各个业务的netty请求 处理。
+ * 不同的命令，可能对应不同的接口。
  */
 public interface NettyRequestProcessor {
     RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request)

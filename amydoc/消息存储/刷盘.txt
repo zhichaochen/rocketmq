@@ -1,0 +1,40 @@
+
+
+
+
+
+2、刷盘出现的关键属性
+    1、MappedFileQueue 与MappedFile的关系
+        可以这样认为，MappedFile 代表一个个物理文件，
+        而 MappedFileQueue 代表由一个个 MappedFile 组成的一个连续逻辑的大文件。
+        并且每一个 MappedFile 的【命名以该文件在整个文件序列中的偏移量来表示】。
+
+    2、MappedFileQueue
+        1）flushedWhere: 整个刷新的偏移量，针对该MappedFileQueue。
+        2）committedWhere:当前提交的偏移量，针对该MappedFileQueue
+        commit与flush的区别？
+
+    3、MappedFile
+        1）wrotePosition :当前待写入位置。
+        2）committedPosition：已提交位置。
+        3）flushedPosition：已刷盘位置， 应满足：commitedPosition <= flushedPosition。
+
+
+10、异步刷盘
+
+异步刷盘机制，实现原理很简单，就是按照配置的周期定时提交信息到 MappedFile，定时刷写到磁盘，我们重点关注如下几个配置项。
+
+相关服务类（线程）CommitLog$FlushRealTimeService 、CommitLog$CommitRealTimeService。
+
+    commitIntervalCommitLog
+    CommitRealTimeService 线程的循环间隔，默认200ms。
+    commitCommitLogLeastPages
+    每次提交到文件中，至少需要多少个页（默认4页）。
+    flushCommitLogLeastPages
+    每次刷写到磁盘(commitlog)，至少需要多个页（默认4页）。
+    flushIntervalCommitLog
+    异步刷新线程，每次处理完一批任务后的等待时间，默认为500ms。
+
+刷盘的逻辑在同步时已经讲解，现在我们重点看一下提交操作,参考 MappedFileQueue.commit 方法。
+
+MappedFileQueue#commit

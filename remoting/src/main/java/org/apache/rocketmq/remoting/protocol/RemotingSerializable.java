@@ -19,9 +19,20 @@ package org.apache.rocketmq.remoting.protocol;
 import com.alibaba.fastjson.JSON;
 import java.nio.charset.Charset;
 
+/**
+ * 序列化操作（使用json序列化的方式）
+ *
+ * 默认序列化的是[RemotingCommand]对象
+ */
 public abstract class RemotingSerializable {
+    //默认的编码格式
     private final static Charset CHARSET_UTF8 = Charset.forName("UTF-8");
 
+    /**
+     * 编码：将请求头信息对象转换成json字符串
+     * @param obj ：RemotingCommand
+     * @return
+     */
     public static byte[] encode(final Object obj) {
         final String json = toJson(obj, false);
         if (json != null) {
@@ -34,11 +45,27 @@ public abstract class RemotingSerializable {
         return JSON.toJSONString(obj, prettyFormat);
     }
 
+    /**
+     * 解码，将json字符串，转化成对象。
+     * @param data
+     * @param classOfT
+     * @param <T>
+     * @return
+     */
     public static <T> T decode(final byte[] data, Class<T> classOfT) {
+        //字节码转化成字符串
         final String json = new String(data, CHARSET_UTF8);
         return fromJson(json, classOfT);
     }
 
+    /**
+     * 将json字符串转化为对象。
+     *
+     * @param json
+     * @param classOfT
+     * @param <T>
+     * @return
+     */
     public static <T> T fromJson(String json, Class<T> classOfT) {
         return JSON.parseObject(json, classOfT);
     }

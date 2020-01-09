@@ -24,11 +24,17 @@ import org.apache.rocketmq.remoting.CommandCustomHeader;
 import org.apache.rocketmq.remoting.annotation.CFNotNull;
 import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 
+/**
+ * 查询消息的请求头
+ */
 public class QueryMessageRequestHeader implements CommandCustomHeader {
     @CFNotNull
     private String topic;
     @CFNotNull
     private String key;
+    /**
+     * 一次请求最多查询多少条消息。
+     */
     @CFNotNull
     private Integer maxNum;
     @CFNotNull

@@ -1,0 +1,70 @@
+总结：
+    Remoting：类名包含Remoting，表示和远程服务有关系。表示操作RPC。
+
+1、常用ChannelOption
+    参考：https://blog.csdn.net/zhongzunfa/article/details/94590670
+
+2、netty核心
+    发射一个请求，NIO异步响应回来之后，如果找到该请求。
+    一般是：
+        一个请求定义一个id。
+        缓存起来。
+        当响应回来之后，找到该Id对应的请求。
+
+3、netty编码
+    rocketmq写入（writeAndFlush）的是一个命令（RemotingCommand）。
+    在NettyEncoder#encode中进行读取RemotingCommand中的数据，进行编码操作。
+
+    在编码的时候，（在设置请求头和设置请求体的时候都是）
+        1、先进行序列化，默认使用json进行序列化。
+        2、再转化成字节码，并将字节码编码在需要的位置。
+
+
+
+3、invokeSync,invokeAsync,oneway 三种调用方式
+    其中：writeAndFlush() 可以写入任何一个类型。
+    写入之后，netty自动调用我们自定义的序列化方式进行序列化。
+
+    1、oneway ：
+        仅仅发送而已，不设置请求id，不设置ResponseFuture
+        1、获取信号量
+        2、发送异步请求
+            channel.writeAndFlush
+        3、发送完成后，释放信号量。
+
+    2、invokeAsync：
+        0、获取信号量
+            限制最大并发数
+
+        1、创建请求响应，并缓存
+            1、创建ResponseFuture：
+                响应对象，表示一个请求的响应。
+            2、opaque：请求Id，
+                一个自增的编号
+            3、缓存入map
+                其中key：请求id，value：响应对象。
+
+        2、异步发送请求。
+             channel.writeAndFlush
+
+        3、处理响应
+            1、SimpleChannelInboundHandler#channelRead0
+                收到响应
+            2、NettyRemotingAbstract#processResponseCommand
+                从缓存中通过请求id，找到该请求的响应对象。
+                设置响应结果到，ResponseFuture 对象。
+
+        4、如果有回调函数，异步执行回调，处理响应结果。
+            NettyRemotingAbstract#executeInvokeCallback
+            本质是开启一个线程【真正去处理响应结果】。
+
+        5、释放信号量。
+
+    3、invokeSync
+        本质来说还是异步调用。
+        只不过，当请求发出之后，直接使用countDownLatch，阻塞当前线程。
+
+        例如：
+        countDownLatch.await(timeoutMillis, TimeUnit.MILLISECONDS);
+        其中：timeoutMillis ：请求的超时时间
+

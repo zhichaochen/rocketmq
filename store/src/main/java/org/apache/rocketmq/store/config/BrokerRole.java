@@ -16,7 +16,15 @@
  */
 package org.apache.rocketmq.store.config;
 
+/**
+ * 当前Broker的角色
+ */
 public enum BrokerRole {
+    /**
+     * Master，且消息同步发送。
+     * Master，且消息异步发送。
+     * Slave，slave。
+     */
     ASYNC_MASTER,
     SYNC_MASTER,
     SLAVE;

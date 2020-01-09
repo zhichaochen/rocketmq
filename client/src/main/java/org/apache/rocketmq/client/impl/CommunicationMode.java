@@ -16,6 +16,10 @@
  */
 package org.apache.rocketmq.client.impl;
 
+/**
+ * 连接Broker方式
+ * 同步，异步，oneway ：只管发送，成功了没有，不知道
+ */
 public enum CommunicationMode {
     SYNC,
     ASYNC,

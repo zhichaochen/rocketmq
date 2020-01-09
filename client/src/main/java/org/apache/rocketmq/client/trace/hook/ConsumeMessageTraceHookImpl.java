@@ -31,6 +31,9 @@ import java.util.ArrayList;
 import java.util.List;
 import org.apache.rocketmq.common.protocol.NamespaceUtil;
 
+/**
+ * 跟踪消费消息 钩子函数
+ */
 public class ConsumeMessageTraceHookImpl implements ConsumeMessageHook {
 
     private TraceDispatcher localDispatcher;
@@ -44,6 +47,10 @@ public class ConsumeMessageTraceHookImpl implements ConsumeMessageHook {
         return "ConsumeMessageTraceHook";
     }
 
+    /**
+     * 消费消息前置钩子
+     * @param context
+     */
     @Override
     public void consumeMessageBefore(ConsumeMessageContext context) {
         if (context == null || context.getMsgList() == null || context.getMsgList().isEmpty()) {

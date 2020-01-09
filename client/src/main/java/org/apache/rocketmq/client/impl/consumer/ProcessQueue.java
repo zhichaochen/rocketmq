@@ -37,6 +37,13 @@ import org.apache.rocketmq.common.protocol.body.ProcessQueueInfo;
 
 /**
  * Queue consumption snapshot
+ *
+ * 待消费消息列表
+ *
+ * 消息拉回来之后，会首先放入该队列中，等待被消费
+ * 其中：
+ *
+ * ProcessQueue与MessageQueue 1:1的关系
  */
 public class ProcessQueue {
     public final static long REBALANCE_LOCK_MAX_LIVE_TIME =
@@ -45,8 +52,13 @@ public class ProcessQueue {
     private final static long PULL_MAX_IDLE_TIME = Long.parseLong(System.getProperty("rocketmq.client.pull.pullMaxIdleTime", "120000"));
     private final InternalLogger log = ClientLogger.getLog();
     private final ReadWriteLock lockTreeMap = new ReentrantReadWriteLock();
+    /**
+     * 缓存一次拉取的消息
+     */
     private final TreeMap<Long, MessageExt> msgTreeMap = new TreeMap<Long, MessageExt>();
+    //消息条数
     private final AtomicLong msgCount = new AtomicLong();
+    //处理的消息的总size
     private final AtomicLong msgSize = new AtomicLong();
     private final Lock lockConsume = new ReentrantLock();
     /**
@@ -55,9 +67,16 @@ public class ProcessQueue {
     private final TreeMap<Long, MessageExt> consumingMsgOrderlyTreeMap = new TreeMap<Long, MessageExt>();
     private final AtomicLong tryUnlockTimes = new AtomicLong(0);
     private volatile long queueOffsetMax = 0L;
+    /**
+     * 是否丢弃，当消息
+     */
     private volatile boolean dropped = false;
+    /**
+     * 最新拉取的时间戳
+     */
     private volatile long lastPullTimestamp = System.currentTimeMillis();
     private volatile long lastConsumeTimestamp = System.currentTimeMillis();
+    //是否处于锁定状态
     private volatile boolean locked = false;
     private volatile long lastLockTimestamp = System.currentTimeMillis();
     private volatile boolean consuming = false;
@@ -124,6 +143,11 @@ public class ProcessQueue {
         }
     }
 
+    /**
+     * 将拉取到的消息，执行过滤之后，放入TreeMap中
+     * @param msgs
+     * @return
+     */
     public boolean putMessage(final List<MessageExt> msgs) {
         boolean dispatchToConsume = false;
         try {
@@ -165,6 +189,10 @@ public class ProcessQueue {
         return dispatchToConsume;
     }
 
+    /**
+     * 计算消息的跨度
+     * @return
+     */
     public long getMaxSpan() {
         try {
             this.lockTreeMap.readLock().lockInterruptibly();
@@ -182,6 +210,12 @@ public class ProcessQueue {
         return 0;
     }
 
+    /**
+     * 移除消费成功的消息，并计算（消费成功）总的offset
+     *
+     * @param msgs
+     * @return
+     */
     public long removeMessage(final List<MessageExt> msgs) {
         long result = -1;
         final long now = System.currentTimeMillis();

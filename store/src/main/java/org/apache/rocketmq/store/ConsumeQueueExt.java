@@ -35,18 +35,31 @@ import java.util.List;
  * <li>2. And is week reliable.</li>
  * <li>3. Be careful, address returned is always less than 0.</li>
  * <li>4. Pls keep this file small.</li>
+ *
+ * 消息队列扩展
+ *
+ * 扩展消费队列，存储不重要的东西，如消息存储时间、过滤位映射等。
+ *
+ * 我的总结：负责存储队列的一些扩展信息。
  */
 public class ConsumeQueueExt {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
+    //消息映射文件队列
     private final MappedFileQueue mappedFileQueue;
+    //topic
     private final String topic;
+    //queueId
     private final int queueId;
 
+    //存储路径
     private final String storePath;
+    //消息文件大小，默认1G
     private final int mappedFileSize;
+    //字节的临时容器
     private ByteBuffer tempContainer;
 
+    //结尾的空白数据长度，4个字节
     public static final int END_BLANK_DATA_LENGTH = 4;
 
     /**
@@ -406,6 +419,7 @@ public class ConsumeQueueExt {
 
     /**
      * Store unit.
+     * 存储单元
      */
     public static class CqExtUnit {
         public static final short MIN_EXT_UNIT_SIZE

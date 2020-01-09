@@ -1,0 +1,23 @@
+竽道源码：http://www.iocoder.cn/categories/RocketMQ/
+RocketMQ分析： https://www.jianshu.com/u/eb37f1dac20a
+1、同步刷盘
+
+
+
+2、MappedFile
+    MappedFile的名字（file.getName）是00000000000000000000、00000000001073741824、00000000002147483648，
+    【直接用起始偏移量记录每个文件名称】，00000000001073741824换算成大小=1G，即每个文件名称是该文件的startOffset。
+
+    MappedFile提供三种作用：写消息、提交消息到FileChannel、写磁盘
+        1、AppendMessageResult appendMessagesInner(MessageExt messageExt, final AppendMessageCallback cb)
+
+        2、boolean appendMessage(final byte[] data, final int offset, final int length)
+
+        3、int commit(final int commitLeastPages)
+
+        4、int flush(final int flushLeastPages)
+
+
+
+3、如何保证消息不丢失？？？？
+    参考：https://blog.csdn.net/yueloveme/article/details/98208486

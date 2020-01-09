@@ -17,25 +17,28 @@
 
 package org.apache.rocketmq.client.consumer.listener;
 
+/**
+ * 消费消息，返回类型
+ */
 public enum ConsumeReturnType {
     /**
-     * consume return success
+     * consume return success：成功
      */
     SUCCESS,
     /**
-     * consume timeout ,even if success
+     * consume timeout ,even if success：超时
      */
     TIME_OUT,
     /**
-     * consume throw exception
+     * consume throw exception：发生异常
      */
     EXCEPTION,
     /**
-     * consume return null
+     * consume return null：业务代码消费消息后返回null
      */
     RETURNNULL,
     /**
-     * consume return failed
+     * consume return failed ：消费失败
      */
     FAILED
 }

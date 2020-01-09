@@ -18,20 +18,35 @@ package org.apache.rocketmq.store;
 
 /**
  * When write a message to the commit log, returns results
+ *
+ * 消息写入到 MappedFile（内存映射文件中，bytebuffer）中的结果
  */
 public class AppendMessageResult {
-    // Return code
+    // 追加结果（成功，到达文件尾（文件剩余空间不足）、消息长度超过、消息属性长度超出、未知错误）。
     private AppendMessageStatus status;
-    // Where to start writing
+
+    //写入字节总长度。（write()到磁盘的字节）
     private long wroteOffset;
-    // Write Bytes
+
+    /**
+     * 待写入的字节总长度。也就是接下来要写入的消息的长度。
+     *
+     * 这个时候，还没有write到磁盘，故而，在这里记录一下。
+     *
+     * 对于同步刷盘来说：直接调用Flush就可以了。
+     */
     private int wroteBytes;
-    // Message ID
+
+    // 消息Id
     private String msgId;
-    // Message storage timestamp
+
+    // 消息写入时间戳。
     private long storeTimestamp;
-    // Consume queue's offset(step by one)
+
+    // 逻辑的consumeque 偏移量。消息队列偏移量。
     private long logicsOffset;
+
+    //消息写入时机戳（消息存储时间戳--- 消息存储开始时间戳）。
     private long pagecacheRT = 0;
 
     private int msgNum = 1;

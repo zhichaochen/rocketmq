@@ -22,9 +22,19 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
+/**
+ * rocketmq 自己实现的序列化方式，
+ * 本质来说，并没有进行序列化，只是直接进行编码，
+ * 和json编码方式的差别是，没有使用RomotingCommand对象。
+ */
 public class RocketMQSerializable {
     private static final Charset CHARSET_UTF8 = Charset.forName("UTF-8");
 
+    /**
+     * 编码
+     * @param cmd
+     * @return
+     */
     public static byte[] rocketMQProtocolEncode(RemotingCommand cmd) {
         // String remark
         byte[] remarkBytes = null;
@@ -73,6 +83,11 @@ public class RocketMQSerializable {
         return headerBuffer.array();
     }
 
+    /**
+     * 序列化map
+     * @param map
+     * @return
+     */
     public static byte[] mapSerialize(HashMap<String, String> map) {
         // keySize+key+valSize+val
         if (null == map || map.isEmpty())
@@ -114,6 +129,13 @@ public class RocketMQSerializable {
         return content.array();
     }
 
+    /**
+     * 计算总长
+     *
+     * @param remark
+     * @param ext
+     * @return
+     */
     private static int calTotalLen(int remark, int ext) {
         // int code(~32767)
         int length = 2
@@ -133,16 +155,25 @@ public class RocketMQSerializable {
         return length;
     }
 
+    /**
+     * 解码
+     * @param headerArray
+     * @return
+     */
     public static RemotingCommand rocketMQProtocolDecode(final byte[] headerArray) {
         RemotingCommand cmd = new RemotingCommand();
         ByteBuffer headerBuffer = ByteBuffer.wrap(headerArray);
         // int code(~32767)
+        //命令编码
         cmd.setCode(headerBuffer.getShort());
         // LanguageCode language
+        //编程语言
         cmd.setLanguage(LanguageCode.valueOf(headerBuffer.get()));
         // int version(~32767)
+        //版本号
         cmd.setVersion(headerBuffer.getShort());
         // int opaque
+        //
         cmd.setOpaque(headerBuffer.getInt());
         // int flag
         cmd.setFlag(headerBuffer.getInt());
@@ -164,6 +195,12 @@ public class RocketMQSerializable {
         return cmd;
     }
 
+    /**
+     * 反序列化map
+     *
+     * @param bytes
+     * @return
+     */
     public static HashMap<String, String> mapDeserialize(byte[] bytes) {
         if (bytes == null || bytes.length <= 0)
             return null;
@@ -189,6 +226,12 @@ public class RocketMQSerializable {
         return map;
     }
 
+    /**
+     * 是否为空校验
+     *
+     * @param str
+     * @return
+     */
     public static boolean isBlank(String str) {
         int strLen;
         if (str == null || (strLen = str.length()) == 0) {

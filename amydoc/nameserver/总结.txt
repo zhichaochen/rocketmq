@@ -1,0 +1,31 @@
+NameServer相当于配置中心，维护Broker集群、Broker信息、Broker存活信息、主题与队列信息等。
+NameServer彼此之间不通信，每个Broker与集群内所有的Nameserver保持长连接。
+
+
+NamesrvController 是 NameServer 模块的核心控制类。
+
+MQ 集群的配置中心存储什么信息???
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

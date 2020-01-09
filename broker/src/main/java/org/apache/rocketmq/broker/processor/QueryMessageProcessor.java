@@ -38,6 +38,10 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.store.QueryMessageResult;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 
+/**
+ * 查询消息的处理器，
+ * 也就是remote client的发送请求，来查询消息，这里负责处理。
+ */
 public class QueryMessageProcessor implements NettyRequestProcessor {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
 
@@ -47,12 +51,22 @@ public class QueryMessageProcessor implements NettyRequestProcessor {
         this.brokerController = brokerController;
     }
 
+    /**
+     * 处理请求
+     *
+     * @param ctx
+     * @param request
+     * @return
+     * @throws RemotingCommandException
+     */
     @Override
     public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request)
         throws RemotingCommandException {
         switch (request.getCode()) {
+            //查询消息请求
             case RequestCode.QUERY_MESSAGE:
                 return this.queryMessage(ctx, request);
+            //查看消息通过Id。
             case RequestCode.VIEW_MESSAGE_BY_ID:
                 return this.viewMessageById(ctx, request);
             default:
@@ -67,40 +81,68 @@ public class QueryMessageProcessor implements NettyRequestProcessor {
         return false;
     }
 
+    /**
+     * 查询消息
+     *
+     * @param ctx
+     * @param request
+     * @return
+     * @throws RemotingCommandException
+     */
     public RemotingCommand queryMessage(ChannelHandlerContext ctx, RemotingCommand request)
         throws RemotingCommandException {
+        //创建响应头
         final RemotingCommand response =
             RemotingCommand.createResponseCommand(QueryMessageResponseHeader.class);
+
+        //获取请求信息
         final QueryMessageResponseHeader responseHeader =
             (QueryMessageResponseHeader) response.readCustomHeader();
+
+        //解码请求头，并将请求头数据封装进QueryMessageRequestHeader对象。
         final QueryMessageRequestHeader requestHeader =
             (QueryMessageRequestHeader) request
                 .decodeCommandCustomHeader(QueryMessageRequestHeader.class);
 
+        //设置请求Id
         response.setOpaque(request.getOpaque());
 
         String isUniqueKey = request.getExtFields().get(MixAll.UNIQUE_MSG_QUERY_FLAG);
         if (isUniqueKey != null && isUniqueKey.equals("true")) {
+            //设置最多一次只能查询32条消息
             requestHeader.setMaxNum(this.brokerController.getMessageStoreConfig().getDefaultQueryMaxNum());
         }
-
+        /**
+         * 查询消息，并返回查询结果。
+         */
         final QueryMessageResult queryMessageResult =
+            //查询消息
             this.brokerController.getMessageStore().queryMessage(requestHeader.getTopic(),
                 requestHeader.getKey(), requestHeader.getMaxNum(), requestHeader.getBeginTimestamp(),
                 requestHeader.getEndTimestamp());
         assert queryMessageResult != null;
-
+        /**
+         * 设置最新的offset，表示消息消费的位置。
+         */
         responseHeader.setIndexLastUpdatePhyoffset(queryMessageResult.getIndexLastUpdatePhyoffset());
         responseHeader.setIndexLastUpdateTimestamp(queryMessageResult.getIndexLastUpdateTimestamp());
 
+        //查询到了结果
         if (queryMessageResult.getBufferTotalSize() > 0) {
+            //设置响应结果
             response.setCode(ResponseCode.SUCCESS);
             response.setRemark(null);
 
             try {
+                /**
+                 * 封装查询结果到FileRegion对象。
+                 */
                 FileRegion fileRegion =
                     new QueryMessageTransfer(response.encodeHeader(queryMessageResult
                         .getBufferTotalSize()), queryMessageResult);
+                /**
+                 * 将查询结果响应回去。
+                 */
                 ctx.channel().writeAndFlush(fileRegion).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {
@@ -117,7 +159,9 @@ public class QueryMessageProcessor implements NettyRequestProcessor {
 
             return null;
         }
-
+        /**
+         * 没有查询到消息。
+         */
         response.setCode(ResponseCode.QUERY_NOT_FOUND);
         response.setRemark("can not find message, maybe time range not correct");
         return response;

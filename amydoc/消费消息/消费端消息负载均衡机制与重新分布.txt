@@ -1,0 +1,88 @@
+参考：https://blog.csdn.net/prestigeding/article/details/78927447
+
+
+1、我们从上文知道，PullMessageService 线程主要是负责 pullRequestQueue
+中的 PullResult，那问题来了，pullRequestQueue 中的数据从哪来，在什么时候由谁来填充呢。
+
+
+Redis相关面试题：https://blog.csdn.net/qq_35190492/article/details/102889333
+明天看一下：
+
+首先详细分析一下Latch线程：await的时候，会不会释放锁？？？？
+什么时候适合使用Latch线程同步
+什么时候适合使用：轮询然后sleep一会儿
+什么时候适合使用周期性调度线程？？？
+
+
+问题：
+    什么时候ProcessQueue会丢弃（isDrop = true）？？？
+
+1、重要的类
+    MessageQueue：消息队列
+    PullRequest：拉取消息请求
+        去broke拉取消息
+    PullMessageService : 拉取消息线程
+
+    ProcessQueue：处理对列，存放待消费的数据。
+        消息拉取回来之后，首先存放在ProcessQueue中。
+
+
+    MessageQueue : ProcessQueue : PullRequest = 1 : 1 :1关系
+
+    ConsumeRequest：消费请求。是一个内部类，也是一个线程
+        将ProcessQueue中的数据封装成一个个ConsumeRequest。
+        开启ConsumeRequest线程，调用消费消息监听器，业务代码开始消费消息。
+
+3、源码分析
+    1、RebalanceService
+    2、MQClientInstance#doRebalance
+        轮询所有的消费者组，获取对应的消费者（DefaultMQPushConsumerImpl 或 DefaultMQPullConsumerImpl）
+    3、执行具体消费者的doRebalance方法
+        例如：DefaultMQPushConsumerImpl.doRebalance
+
+    经过层层对象委托，终于进入到实现消息负载分发的核心地带了，RebalanceImpl类
+    4、RebalanceImpl#doRebalance
+    5、rebalanceByTopic#rebalanceByTopic
+        这个方法是贯穿整个流程的核心方法
+
+
+
+4、总结：
+    本文主要阐述了消息消费端负载机制，这里消息非顺序消息机制就梳理到这里了，大概再总结一下：
+
+    1、首先RebalanceService线程启动，为消费者分配消息队列。
+        其实每一个MessageQueue 会构建一个 PullRequest 对象。
+        然后通过 RebalanceImpl 将 PullRequest放入到 PullMessageService 线程的 LinkedBlockingQueue,
+
+        消费者为什么需要去Broker获取？？？？
+
+    2、通过 RebalanceImpl#dispatchPullRequest ，
+        将 PullRequest放入到 PullMessageService 线程的 LinkedBlockingQueue
+
+    3、唤醒拉取消息线程（PullMessageService）
+        RebalancePushImpl#run
+
+        唤醒 queue.take()方法
+            当缓存中没有PullRequest请求的时候，调用 queue.take()时，会阻塞PullMessageService线程
+            当缓存中存在PullRequest请求后，会唤醒PullMessageService线程
+
+        PullMessageService#run线程开始执行，PullMessageService#pullMessage
+
+    4、执行拉取消息流程
+        DefaultMQPushConsumerImpl#pullMessage
+        通过网络从broker端拉取消息，一次最多拉取的消息条数可配置，默认为32条，
+
+    5、pullAPIWrapper.processPullResult
+        将拉取的消息，执行过滤等，
+
+    6、将消息放入ProcessQueue的 TreeMap中，缓存起来，等待被消费。
+        ProcessQueue#putMessage
+
+    7、提交到消费者的线程池去执行，
+        ConsumeMessageConcurrentlyService#submitConsumeRequest
+        然后封装成任务（ConsumeRequest）,
+
+    8、消费完成后，归还PullRequest 给 PullMessageService，供线程
+        每次消费消息完成后，又将该 PullRequest 放入到 PullMessageService中
+        （DefaultMQPushConsumerImpl 的机制就是pullInterval 为 0；
+

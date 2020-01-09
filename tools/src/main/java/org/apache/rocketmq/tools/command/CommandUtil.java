@@ -33,6 +33,9 @@ import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
 import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
 import org.apache.rocketmq.tools.admin.MQAdminExt;
 
+/**
+ * 命令执行工具类。
+ */
 public class CommandUtil {
 
     private static final String ERROR_MESSAGE = "Make sure the specified clusterName exists or the name server " +
@@ -102,6 +105,17 @@ public class CommandUtil {
         return masterSet;
     }
 
+    /**
+     * 通过集群名称获取 master 和 slave 地址。
+     * @param adminExt
+     * @param clusterName
+     * @return
+     * @throws InterruptedException
+     * @throws RemotingConnectException
+     * @throws RemotingTimeoutException
+     * @throws RemotingSendRequestException
+     * @throws MQBrokerException
+     */
     public static Set<String> fetchMasterAndSlaveAddrByClusterName(final MQAdminExt adminExt, final String clusterName)
         throws InterruptedException, RemotingConnectException, RemotingTimeoutException,
         RemotingSendRequestException, MQBrokerException {

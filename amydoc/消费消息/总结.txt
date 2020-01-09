@@ -1,0 +1,117 @@
+1、要解决的问题？？？
+    1、一个消费组中多个消费者是如何对消息队列（1个主题多个消息队列）进行负载消费的？？？
+
+    2、一个消费者中多个线程又是如何协作（并发）的消费分配给该消费者的消息队列中的消息呢？
+
+    3、消息消费进度如何保存？？？？
+
+    包括MQ是如何知道消息是否正常被消费了？？？？
+
+    4、RocketMQ 推拉模式实现机制？？？？
+
+
+
+1、概述
+    消息消费方式
+        拉取、推送。
+
+    消费者组与消费模式
+        多个消费者组成一个消费组，
+        两种模式：
+            集群（消息被其中任何一个消息者消费）、广播模式（全部消费者消费）。
+
+    ConsumeFromWhere consumeFromWhere
+        从何处开始消费，可选值：
+        1）CONSUME_FROM_LAST_OFFSET：上一次消费偏移量
+        2）CONSUME_FROM_FIRST_OFFSET：从头开始
+        3）CONSUME_FROM_TIMESTAMP：从某个时间点开始
+
+    消费进度存储
+        其实现类为：OffsetStore offsetStore。消费者需要记录消息消费的进度：
+        1）广播模式：广播模式由于每个消费者都需要消费消息，故消息的进度（最后消费的偏移量可以保存在本地）。
+        2）集群模式：由于集群中的消费者只要一个消费消息即可，故消息的消费进度，
+            需要保存在集中点，故 RocketMQ存储在Broker所在的服务器。
+
+2、消息消费实现
+    使用推送模式，设置消费者所属组，订阅主题、定义消息消费回调接口，
+    推送消息后消费方具体业务处理，并返回CONSUME_SUCCESS表示消费成功。
+
+    消息消费者具体实现类：org.apache.rocketmq.client.impl.consumer.DefaultMQPushConsumerImpl。
+
+
+3、消息消费端核心类
+    DefaultMQPushConsumerImpl ：消息消息者默认实现类，应用程序中直接用该类的实例完成消息的消费，并回调业务方法。
+    RebalanceImpl 字面上的意思（重新平衡）也就是消费端消费者与消息队列的重新分布，与消息应该分配给哪个消费者消费息息相关。
+    MQClientInstance 消息客户端实例，负载与MQ服务器（Broker,Nameserver)交互的网络实现
+    PullAPIWrapper pull与Push在RocketMQ中，其实就只有Pull模式，所以Push其实就是用pull封装一下
+    MessageListenerInner 消费消费回调类，当消息分配给消费者消费时，执行的业务代码入口
+    OffsetStore 消息消费进度保存
+    ConsumeMessageService 消息消费逻辑
+
+4、ConcurrentMap<String/* group */, MQConsumerInner> consumerTable
+    一个消费者组：只对应一个消费者。因为每个消费客户端，表示一个消费者。没有
+
+    一个应用程序，一个消费组，只需要一个DefaultMQPushConsumerImpl,，在一个应用中，使用多线程创建多个
+    消费者，尝试去消费同一个组，没有效果，只会有一个消费者在消费。
+
+
+5、延迟拉取实现
+
+
+6、顺序消费与非顺序（并发）消费
+    1）非顺序（并发）消息 消息消费服务ConumeMessageService的提交消费请求
+        参见：ConsumeMessageOrderlyService#ConsumeRequest#Run
+
+        非顺序消费（并发消费）的主要思路：
+        1、将待消费的消息存入ProcessQueue中存储，并执行消息消费之前钩子函数
+        2、修改待消费消息的主题（设置为消费组的重试主题）
+        3、是否分批消费（每次传给业务消费监听器的最大数量为配置的 sconsumeMessageBatchMaxSize）
+
+        4、执行消费后钩子函数，并根据业务方返回的消息消费结果（成功，重试）【ACK】确认信息，然后更新消息进度，从ProceeQueue中删除相应的消息
+
+    2）顺序消费消息
+        参见：ConsumeMessageConcurrentlyService#ConsumeRequest#Run
+
+        处理流程与并发消费差不多
+
+        RocketMQ实现顺序消费是针对MessageQueue
+        也就是RocketMQ无法做到多MessageQueue的全局顺序消费
+
+    两者的区别？？？
+
+6、消费失败的处理方式，重试主题的处理方式。
+
+
+
+8、push and pull
+    consumer被分为2类：MQPullConsumer和MQPushConsumer
+    其实本质都是拉模式（pull），即consumer轮询从broker拉取消息。
+
+    区别是：
+    1、push
+        push方式里，consumer把轮询过程封装了，并注册MessageListener监听器，
+        取到消息后，唤醒MessageListener的consumeMessage()来消费，对用户而言，感觉消息是被推送过来的。
+
+    2、pull
+        pull方式里，取消息的过程需要用户自己写，
+
+        首先通过打算消费的Topic拿到MessageQueue的集合，遍历MessageQueue集合，
+        然后针对每个MessageQueue批量取消息，一次取完后，记录该队列下一次要取的
+        开始offset，直到取完了，再换另一个MessageQueue。
+
+    我的总结：
+        push方式，直接注册监听器，有消息后，会调用监听器中的方法，从而触发消费流程
+        pull方式：拉取消息的过程需要自己写.
+
+        总体来说：push更方便，pull更灵活。一般来说使用push就可以了，省事。
+
+    例子参考：
+        push:方式
+        org.apache.rocketmq.example.quickstart.Consumer
+        org.apache.rocketmq.example.quickstart.Producer
+
+        pull：方式
+        org.apache.rocketmq.example.simple.PullConsumer
+        org.apache.rocketmq.example.simple.PullConsumerTest
+
+

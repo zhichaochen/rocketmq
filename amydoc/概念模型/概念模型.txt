@@ -1,0 +1,55 @@
+rocketmq的概念模型；https://blog.csdn.net/binzhaomobile/article/details/73332463
+1、topic
+    参考：rocketMq-Topic创建过程：https://www.jianshu.com/p/345aaa18f71d
+
+    Topic是一个逻辑上的概念，实际上在每个broker上以queue的形式保存，
+    也就是说每个topic在broker上会划分成【几个逻辑队列】，【每个逻辑队列保存一部分消息数据】，
+    但是保存的消息数据实际上不是真正的消息数据，而是指向commit log的消息索引。
+
+    Topic创建的时候可以用集群模式去创建（这样集群里面每个broker的queue的数量相同），
+    也可以用单个broker模式去创建（这样每个broker的queue数量可以不一致）。
+
+    每个broker上的角色是等同的，也就是说每个broker上面的queue保存了该topic下一部分消息，
+    注意是一部分而不是全量消息。
+
+2、writeQueueNum和readQueueNum理解
+
+
+
+
+3、Topic分片和Queue
+    topic分片目的：分片的主要目的是突破单点的资源（网络带宽，CPU，内存或文件存储）限制从而实现水平扩展。
+    Queue的目的 ：多个消费者消费多个queue，
+
+        Queue是Topic在一个Broker上的分片等分为指定份数后的其中一份，是负载均衡过程中资源分配的基本单元。
+
+
+
+    故而 ：
+        在集群消费模式下：集群中的Consumer数量应该小于等于Queue数量
+
+
+4、broker集群
+    包括多个master slave。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

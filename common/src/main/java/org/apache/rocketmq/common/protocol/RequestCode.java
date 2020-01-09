@@ -17,6 +17,11 @@
 
 package org.apache.rocketmq.common.protocol;
 
+/**
+ * 请求编码
+ *
+ * 不同的请求编码，对应着不同的请求处理器。
+ */
 public class RequestCode {
 
     public static final int SEND_MESSAGE = 10;
@@ -27,6 +32,7 @@ public class RequestCode {
     public static final int QUERY_BROKER_OFFSET = 13;
     public static final int QUERY_CONSUMER_OFFSET = 14;
     public static final int UPDATE_CONSUMER_OFFSET = 15;
+    //创建或者更新topic。
     public static final int UPDATE_AND_CREATE_TOPIC = 17;
     public static final int GET_ALL_TOPIC_CONFIG = 21;
     public static final int GET_TOPIC_CONFIG_LIST = 22;

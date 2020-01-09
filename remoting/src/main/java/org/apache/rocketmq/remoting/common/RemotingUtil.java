@@ -35,12 +35,16 @@ import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
 
 public class RemotingUtil {
+    //系统名称
     public static final String OS_NAME = System.getProperty("os.name");
 
     private static final InternalLogger log = InternalLoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
     private static boolean isLinuxPlatform = false;
     private static boolean isWindowsPlatform = false;
 
+    /**
+     * 判断系统是window 还是 linux
+     */
     static {
         if (OS_NAME != null && OS_NAME.toLowerCase().contains("linux")) {
             isLinuxPlatform = true;
@@ -55,6 +59,12 @@ public class RemotingUtil {
         return isWindowsPlatform;
     }
 
+    /**
+     * Selector.open()
+     *
+     * @return
+     * @throws IOException
+     */
     public static Selector openSelector() throws IOException {
         Selector result = null;
 
@@ -90,6 +100,10 @@ public class RemotingUtil {
         return isLinuxPlatform;
     }
 
+    /**
+     * 获取本机地址
+     * @return
+     */
     public static String getLocalAddress() {
         try {
             // Traversal Network interface to get the first non-loopback and non-private address
@@ -143,6 +157,11 @@ public class RemotingUtil {
         }
     }
 
+    /**
+     * 将地址封装进InetSocketAddress对象
+     * @param addr
+     * @return
+     */
     public static SocketAddress string2SocketAddress(final String addr) {
         int split = addr.lastIndexOf(":");
         String host = addr.substring(0, split);
@@ -164,6 +183,13 @@ public class RemotingUtil {
         return connect(remote, 1000 * 5);
     }
 
+    /**
+     * 连接远程服务
+     *
+     * @param remote
+     * @param timeoutMillis
+     * @return
+     */
     public static SocketChannel connect(SocketAddress remote, final int timeoutMillis) {
         SocketChannel sc = null;
         try {
@@ -189,6 +215,10 @@ public class RemotingUtil {
         return null;
     }
 
+    /**
+     * 关闭通道，打印关闭日志
+     * @param channel
+     */
     public static void closeChannel(Channel channel) {
         final String addrRemote = RemotingHelper.parseChannelRemoteAddr(channel);
         channel.close().addListener(new ChannelFutureListener() {

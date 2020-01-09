@@ -18,21 +18,41 @@ package org.apache.rocketmq.store.config;
 
 import java.io.File;
 import org.apache.rocketmq.common.annotation.ImportantField;
+import org.apache.rocketmq.store.CommitLog;
 import org.apache.rocketmq.store.ConsumeQueue;
 
+/**
+ * 消息存储相关配置
+ */
 public class MessageStoreConfig {
-    //The root directory in which the log data is kept
+    /**
+     * The root directory in which the log data is kept
+     *
+     * 消息位置信息的存储目录（/home/store）,
+     * 也就是消息队列ConsumeQueue文件，该文件中记录了该队列要消费的数据的位置。
+     *
+     * 其中：每个topic的每个ConsumeQueue对应一个文件。
+     */
     @ImportantField
     private String storePathRootDir = System.getProperty("user.home") + File.separator + "store";
 
+    /**
+     * 消息文件的存储目录（/home/store/commitlog）
+     */
     //The directory in which the commitlog is kept
     @ImportantField
     private String storePathCommitLog = System.getProperty("user.home") + File.separator + "store"
         + File.separator + "commitlog";
 
-    // CommitLog file size,default is 1G
+    /**
+     * CommitLog file size,default is 1G
+     *
+     * 每个消息文件的大小。模式是1G
+     */
     private int mappedFileSizeCommitLog = 1024 * 1024 * 1024;
-    // ConsumeQueue file size,default is 30W
+    /**
+     * ConsumeQueue file size,default is 30W
+     */
     private int mappedFileSizeConsumeQueue = 300000 * ConsumeQueue.CQ_STORE_UNIT_SIZE;
     // enable consume queue ext
     private boolean enableConsumeQueueExt = false;
@@ -75,7 +95,10 @@ public class MessageStoreConfig {
     @ImportantField
     private String deleteWhen = "04";
     private int diskMaxUsedSpaceRatio = 75;
-    // The number of hours to keep a log file before deleting it (in hours)
+    /**
+     *  The number of hours to keep a log file before deleting it (in hours)
+     *  文件保存时间：默认保存72个小时
+     */
     @ImportantField
     private int fileReservedTime = 72;
     // Flow control for ConsumeQueue
@@ -107,16 +130,34 @@ public class MessageStoreConfig {
     private int maxTransferCountOnMessageInDisk = 8;
     @ImportantField
     private int accessMessageInMemoryMaxRatio = 40;
+    /**
+     * 是否可以创建索引文件
+     */
     @ImportantField
     private boolean messageIndexEnable = true;
+    /**
+     * 索引文件hash槽数量，默认五百万
+     */
     private int maxHashSlotNum = 5000000;
+    /**
+     * 一个索引文件，存放的最大的索引数量，默认两千万
+     */
     private int maxIndexNum = 5000000 * 4;
+    /**
+     * 批量查询消息，一次能查询的最大数量。
+     */
     private int maxMsgsNumBatch = 64;
     @ImportantField
     private boolean messageIndexSafe = false;
     private int haListenPort = 10912;
+    /**
+     * HA 主从心跳间隔，默认5秒
+     */
     private int haSendHeartbeatInterval = 1000 * 5;
     private int haHousekeepingInterval = 1000 * 20;
+    /**
+     * 一次同步的最大size
+     */
     private int haTransferBatchSize = 1024 * 32;
     @ImportantField
     private String haMasterAddress = null;
@@ -125,6 +166,9 @@ public class MessageStoreConfig {
     private BrokerRole brokerRole = BrokerRole.ASYNC_MASTER;
     @ImportantField
     private FlushDiskType flushDiskType = FlushDiskType.ASYNC_FLUSH;
+    /**
+     * 同步超时时间
+     */
     private int syncFlushTimeout = 1000 * 5;
     private String messageDelayLevel = "1s 5s 10s 30s 1m 2m 3m 4m 5m 6m 7m 8m 9m 10m 20m 30m 1h 2h";
     private long flushDelayOffsetInterval = 1000 * 10;
@@ -133,13 +177,19 @@ public class MessageStoreConfig {
     private boolean warmMapedFileEnable = false;
     private boolean offsetCheckInSlave = false;
     private boolean debugLockEnable = false;
+
+    //能够重复
     private boolean duplicationEnable = false;
     private boolean diskFallRecorded = true;
     private long osPageCacheBusyTimeOutMills = 1000;
+
+    //一次最多能查询32条消息。
     private int defaultQueryMaxNum = 32;
 
     @ImportantField
     private boolean transientStorePoolEnable = false;
+
+    //ByteBuffer池的大小
     private int transientStorePoolSize = 5;
     private boolean fastFailIfNoBufferInStorePool = false;
 

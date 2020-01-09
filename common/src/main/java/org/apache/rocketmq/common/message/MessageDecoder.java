@@ -30,9 +30,13 @@ import java.util.Map;
 import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.common.sysflag.MessageSysFlag;
 
+/**
+ * 消息解码器
+ */
 public class MessageDecoder {
 //    public final static int MSG_ID_LENGTH = 8 + 8;
 
+    //消息编码格式。
     public final static Charset CHARSET_UTF8 = Charset.forName("UTF-8");
     public final static int MESSAGE_MAGIC_CODE_POSTION = 4;
     public final static int MESSAGE_FLAG_POSTION = 16;
@@ -267,6 +271,15 @@ public class MessageDecoder {
         return decode(byteBuffer, readBody, deCompressBody, false);
     }
 
+    /**
+     * 将一条字节消息，封装进MessageExt中。
+     *
+     * @param byteBuffer
+     * @param readBody
+     * @param deCompressBody
+     * @param isClient
+     * @return
+     */
     public static MessageExt decode(
         java.nio.ByteBuffer byteBuffer, final boolean readBody, final boolean deCompressBody, final boolean isClient) {
         try {
@@ -394,6 +407,13 @@ public class MessageDecoder {
         return decodes(byteBuffer, true);
     }
 
+    /**
+     * 消息解码
+     * 将字节码，解析成一条条的消息
+     * @param byteBuffer
+     * @param readBody
+     * @return
+     */
     public static List<MessageExt> decodes(java.nio.ByteBuffer byteBuffer, final boolean readBody) {
         List<MessageExt> msgExts = new ArrayList<MessageExt>();
         while (byteBuffer.hasRemaining()) {

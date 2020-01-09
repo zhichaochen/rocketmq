@@ -24,9 +24,19 @@ import org.apache.rocketmq.remoting.CommandCustomHeader;
 import org.apache.rocketmq.remoting.annotation.CFNotNull;
 import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 
+/**
+ * 查询消息的响应头
+ */
 public class QueryMessageResponseHeader implements CommandCustomHeader {
+    /**
+     * 最新更新索引的时间戳
+     */
     @CFNotNull
     private Long indexLastUpdateTimestamp;
+    /**
+     * 索引的最新offset
+     * 其中：Phyoffset：表示写入磁盘，调用了write方法。
+     */
     @CFNotNull
     private Long indexLastUpdatePhyoffset;
 

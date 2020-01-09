@@ -16,20 +16,37 @@
  */
 package org.apache.rocketmq.common.sysflag;
 
+/**
+ * 消息系统标志
+ */
 public class MessageSysFlag {
+    //压缩标志
     public final static int COMPRESSED_FLAG = 0x1;
+    //多个tag标志
     public final static int MULTI_TAGS_FLAG = 0x1 << 1;
+    //表示Unknown状态，什么都不用做。
     public final static int TRANSACTION_NOT_TYPE = 0;
+    //事务准备
     public final static int TRANSACTION_PREPARED_TYPE = 0x1 << 2;
+    //事务提交
     public final static int TRANSACTION_COMMIT_TYPE = 0x2 << 2;
+    //事务回滚
     public final static int TRANSACTION_ROLLBACK_TYPE = 0x3 << 2;
+    //remote client V6协议
     public final static int BORNHOST_V6_FLAG = 0x1 << 4;
+    //remote server v6
     public final static int STOREHOSTADDRESS_V6_FLAG = 0x1 << 5;
 
     public static int getTransactionValue(final int flag) {
         return flag & TRANSACTION_ROLLBACK_TYPE;
     }
 
+    /**
+     *
+     * @param flag
+     * @param type
+     * @return
+     */
     public static int resetTransactionValue(final int flag, final int type) {
         return (flag & (~TRANSACTION_ROLLBACK_TYPE)) | type;
     }

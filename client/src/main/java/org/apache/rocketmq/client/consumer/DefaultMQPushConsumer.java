@@ -140,6 +140,8 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
 
     /**
      * Subscription relationship
+     * 订阅关系
+     * key ：topic ，value：订阅表达式
      */
     private Map<String /* topic */, String /* sub expression */> subscription = new HashMap<String, String>();
 
@@ -170,12 +172,15 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
 
     /**
      * Concurrently max span offset.it has no effect on sequential consumption
+     * offset跨度，不能超过2000
      */
     private int consumeConcurrentlyMaxSpan = 2000;
 
     /**
      * Flow control threshold on queue level, each message queue will cache at most 1000 messages by default,
      * Consider the {@code pullBatchSize}, the instantaneous value may exceed the limit
+     *
+     * 最多拉取1000条
      */
     private int pullThresholdForQueue = 1000;
 
@@ -217,6 +222,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
 
     /**
      * Batch consumption size
+     * 消费批次Size，一个批次消费几条数据。
      */
     private int consumeMessageBatchMaxSize = 1;
 
@@ -227,6 +233,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
 
     /**
      * Whether update subscription relationship when every pull
+     * 每次请求时是否更新订阅关系
      */
     private boolean postSubscriptionWhenPull = false;
 

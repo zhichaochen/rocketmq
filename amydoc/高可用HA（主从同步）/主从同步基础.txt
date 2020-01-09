@@ -1,0 +1,58 @@
+1、HAService：主从同步核心实现类。
+
+    AtomicInteger connectionCount：Master维护的连接数。（Slave的个数）。
+    List< HAConnection> connectionList：具体连接信息。
+    AcceptSocketService acceptSocketService：服务端接收连接线程实现类。
+    DefaultMessageStore defaultMessageStore：Broker存储实现。
+    WaitNotifyObject waitNotifyObject：同步等待实现。
+    AtomicLong push2SlaveMaxOffset：该Master所有Slave中同步最大的偏移量。
+    GroupTransferService groupTransferService：判断主从同步复制是否完成。
+    HAClient haClient：HA客户端实现，Slave端网络的实现类。
+
+
+2、HAConnection：HA Master-Slave 网络连接对象。
+
+    private final HAService haService：关联的AService实现类。
+    SocketChannel socketChannel：网络通道。
+    String clientAddr：客户端地址。
+    WriteSocketService writeSocketService：HAConnection网络写封装。
+    ReadSocketService readSocketService：HAConnection网络写封装。
+
+3、RocketMQ HA机制大体可以分为如下三个部分。
+    Master启动并监听Slave的连接请求。
+    Slave启动，与Master建立链接。
+    Slave发送待拉取偏移量待Master返回数据，持续该过程。
+
+
+4、Master启动流程（HAService）
+    HAService#start
+
+    建立HA服务端监听服务，处理客户Slave客户端监听请求。
+    启动AcceptSocketService，处理监听逻辑。
+    启动GroupTransferService线程。
+    启动HA客户端线程。
+
+4.1、AcceptSocketService 实现原理
+    AcceptSocketService作为Master端监听Slave连接的实现类，作为HAService的内部类
+
+    该方法是标准的基于NIO的服务端程式实例，选择器每1s处理一次处理一次连接就绪事件。连接事件就绪后，调用ServerSocketChannel的accept()方法创建SocketChannel，与服务端数据传输的通道。然后为每一个连接创建一个HAConnection对象，该HAConnection将负责M-S数据同步逻辑。
+
+4.2、GroupTransferService实现原理
+    GroupTransferService同步主从同步阻塞实现，如果是同步主从模式，消息发送者将消息刷写到磁盘后，需要继续等待新数据被传输到从服务器，从服务器数据的复制是在另外一个线程HAConnection中去拉取，所以消息发送者在这里需要等待数据传输的结果，GroupTransferService就是实现该功能，该类的整体结构与同步刷盘实现类(CommitLog$GroupCommitService)类似，本节只关注该类的核心业务逻辑doWaitTransfer的实现。
+
+=====================================
+5、HAClient 实现原理
+    1、HAClient#dispatchReadRequest
+
+        1、如何判断byteBufferRead是否包含一条完整的消息？？？
+            轮训，首先判断是否包含消息头，再判断是否包含消息体。
+        2、如果不包含一条完整的信息，该如何处理？？？？
+            参见：HAClient#reallocateByteBuffer
+            我的总结:
+                也就是先备份一下。再将缓冲区换成这个备份的。
+                这样该缓冲区（ByteBuffer），一开始是有数据的，后面的数据过来，放在其后面呗。这样就不丢失了。
+
+            其核心思想是将readByteBuffer中剩余的有效数据先复制到readByteBufferBak,
+            然后交换readByteBuffer与readByteBufferBak。
+
+

@@ -20,8 +20,14 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 查询消息的结果
+ */
 public class QueryMessageResult {
-
+    /**
+     * 查询结果列表
+     * 一条消息，对应一条查询结果，结果中记录了消息的位置信息。
+     */
     private final List<SelectMappedBufferResult> messageMapedList =
         new ArrayList<SelectMappedBufferResult>(100);
 
@@ -31,6 +37,10 @@ public class QueryMessageResult {
 
     private int bufferTotalSize = 0;
 
+    /**
+     * 添加查询结果。
+     * @param mapedBuffer
+     */
     public void addMessage(final SelectMappedBufferResult mapedBuffer) {
         this.messageMapedList.add(mapedBuffer);
         this.messageBufferList.add(mapedBuffer.getByteBuffer());

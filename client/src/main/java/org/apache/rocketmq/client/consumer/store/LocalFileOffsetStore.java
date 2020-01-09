@@ -37,15 +37,23 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
 
 /**
  * Local storage implementation
+ * 消费模式之广播模式。消息进度以本地文件方式保存
  */
 public class LocalFileOffsetStore implements OffsetStore {
+    /**
+     * offset 存储根目录，默认为用户主目录，
+     * 例如 /home/dingw,可以在消费者启动的JVM参数中，通过 - Drocketmq.client.localOffsetStoreDir=路径。
+     */
     public final static String LOCAL_OFFSET_STORE_DIR = System.getProperty(
         "rocketmq.client.localOffsetStoreDir",
         System.getProperty("user.home") + File.separator + ".rocketmq_offsets");
     private final static InternalLogger log = ClientLogger.getLog();
     private final MQClientInstance mQClientFactory;
+    //消费组名称。
     private final String groupName;
+    //具体的消费进度保存文件名
     private final String storePath;
+    //内存中的 offfset 进度保持，以 MessageQueue 为键，偏移量为值。
     private ConcurrentMap<MessageQueue, AtomicLong> offsetTable =
         new ConcurrentHashMap<MessageQueue, AtomicLong>();
 
@@ -58,12 +66,16 @@ public class LocalFileOffsetStore implements OffsetStore {
             "offsets.json";
     }
 
+    /**
+     * 主要就是读取 offsets.json 或 offsets.json.bak 中的内容，然后将json转换成map。
+     */
     @Override
     public void load() throws MQClientException {
         OffsetSerializeWrapper offsetSerializeWrapper = this.readLocalOffset();
         if (offsetSerializeWrapper != null && offsetSerializeWrapper.getOffsetTable() != null) {
+            //缓存到offset表
             offsetTable.putAll(offsetSerializeWrapper.getOffsetTable());
-
+            //打印日志
             for (MessageQueue mq : offsetSerializeWrapper.getOffsetTable().keySet()) {
                 AtomicLong offset = offsetSerializeWrapper.getOffsetTable().get(mq);
                 log.info("load consumer's offset, {} {} {}",
@@ -74,6 +86,14 @@ public class LocalFileOffsetStore implements OffsetStore {
         }
     }
 
+    /**
+     * 更新缓存的偏移量
+     *
+     * 如果没有，则缓存，如果存在则更新
+     * @param mq
+     * @param offset
+     * @param increaseOnly
+     */
     @Override
     public void updateOffset(MessageQueue mq, long offset, boolean increaseOnly) {
         if (mq != null) {
@@ -92,10 +112,19 @@ public class LocalFileOffsetStore implements OffsetStore {
         }
     }
 
+    /**
+     * 读取记录的消费offset
+     * @param mq
+     * @param type
+     * @return
+     */
     @Override
     public long readOffset(final MessageQueue mq, final ReadOffsetType type) {
         if (mq != null) {
             switch (type) {
+                /**
+                 * 从缓存读取
+                 */
                 case MEMORY_FIRST_THEN_STORE:
                 case READ_FROM_MEMORY: {
                     AtomicLong offset = this.offsetTable.get(mq);
@@ -105,13 +134,21 @@ public class LocalFileOffsetStore implements OffsetStore {
                         return -1;
                     }
                 }
+                /**
+                 * 从磁盘读取
+                 */
                 case READ_FROM_STORE: {
+                    //offset的包装类
                     OffsetSerializeWrapper offsetSerializeWrapper;
                     try {
+                        //从磁盘读取offset，并封装进OffsetSerializeWrapper
                         offsetSerializeWrapper = this.readLocalOffset();
                     } catch (MQClientException e) {
                         return -1;
                     }
+                    /**
+                     * 获取队列的偏移量，并更新偏移量
+                     */
                     if (offsetSerializeWrapper != null && offsetSerializeWrapper.getOffsetTable() != null) {
                         AtomicLong offset = offsetSerializeWrapper.getOffsetTable().get(mq);
                         if (offset != null) {
@@ -128,6 +165,14 @@ public class LocalFileOffsetStore implements OffsetStore {
         return -1;
     }
 
+    /**
+     * 持久化offset成offset.json 文件。
+     *
+     * 是一个定时任务，MQClientInstance#startScheduledTask
+     * 是一个定时任务，默认消费端启动10秒后，每隔5s的频率持久化一次。
+     *
+     * @param mqs
+     */
     @Override
     public void persistAll(Set<MessageQueue> mqs) {
         if (null == mqs || mqs.isEmpty())
@@ -180,16 +225,29 @@ public class LocalFileOffsetStore implements OffsetStore {
         return cloneOffsetTable;
     }
 
+    /**
+     * 广播模式下消费者保存的offset，参考 offset.json
+     *
+     * @return
+     * @throws MQClientException
+     */
     private OffsetSerializeWrapper readLocalOffset() throws MQClientException {
+        //json字符串
         String content = null;
         try {
             content = MixAll.file2String(this.storePath);
         } catch (IOException e) {
             log.warn("Load local offset store file exception", e);
         }
+        /**
+         * 找不到的化，读取备份文件。
+         */
         if (null == content || content.length() == 0) {
             return this.readLocalOffsetBak();
         } else {
+            /**
+             * 将json字符串转换成json对象（OffsetSerializeWrapper）。
+             */
             OffsetSerializeWrapper offsetSerializeWrapper = null;
             try {
                 offsetSerializeWrapper =
@@ -203,6 +261,11 @@ public class LocalFileOffsetStore implements OffsetStore {
         }
     }
 
+    /**
+     * 读取备份文件
+     * @return
+     * @throws MQClientException
+     */
     private OffsetSerializeWrapper readLocalOffsetBak() throws MQClientException {
         String content = null;
         try {

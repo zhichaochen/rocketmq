@@ -79,6 +79,8 @@ public class Validators {
 
     /**
      * Validate message
+     *
+     * 检查消息是否有效
      */
     public static void checkMessage(Message msg, DefaultMQProducer defaultMQProducer)
         throws MQClientException {

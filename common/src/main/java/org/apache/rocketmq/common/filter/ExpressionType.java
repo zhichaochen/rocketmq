@@ -17,6 +17,11 @@
 
 package org.apache.rocketmq.common.filter;
 
+/**
+ * 表达式类型
+ * 1、sql语法的通配符方式
+ * 2、TAG的方式。"tag1 || tag2，默认方式。
+ */
 public class ExpressionType {
 
     /**
@@ -58,6 +63,12 @@ public class ExpressionType {
      */
     public static final String TAG = "TAG";
 
+    /**
+     * 是否是tag类型
+     *
+     * @param type
+     * @return
+     */
     public static boolean isTagType(String type) {
         if (type == null || "".equals(type) || TAG.equals(type)) {
             return true;

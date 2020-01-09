@@ -77,6 +77,15 @@ public class ConsumerStatsManager {
         this.topicAndGroupConsumeOKTPS.addValue(topic + "@" + group, (int) msgs, 1);
     }
 
+    /**
+     * TPS：是TransactionsPerSecond的缩写，也就是事务数/秒
+     *
+     * 记录消息消费失败的重试次数
+     *
+     * @param group
+     * @param topic
+     * @param msgs
+     */
     public void incConsumeFailedTPS(final String group, final String topic, final long msgs) {
         this.topicAndGroupConsumeFailedTPS.addValue(topic + "@" + group, (int) msgs, 1);
     }

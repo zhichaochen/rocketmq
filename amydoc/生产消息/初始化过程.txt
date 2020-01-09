@@ -1,0 +1,23 @@
+1、发送代码示例
+    1、启动
+        DefaultMQProducer producer = new DefaultMQProducer("test");
+        producer.setNamesrvAddr(namesrvAddr);
+        producer.start();
+
+        其中：test表示生产者组。
+
+    2、发送消息
+        String data = "hello mq";
+        byte[] messageBody = data.getBytes(RemotingHelper.DEFAULT_CHARSET);
+
+        Message message = new Message(TOPIC_TEST, TAG_TEST, String.valueOf(System.currentTimeMillis()), messageBody);
+        //同步发送消息。
+        SendResult sendResult = producer.send(message);
+
+        //异步发送消息(需要添加一个回调函数)
+        producer.send(message, new SendCallback(){})
+
+        //单向发送。
+        producer.sendOneway(message);
+
+2、

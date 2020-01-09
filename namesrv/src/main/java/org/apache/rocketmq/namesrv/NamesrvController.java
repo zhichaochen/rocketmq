@@ -45,12 +45,22 @@ public class NamesrvController {
     private final NamesrvConfig namesrvConfig;
 
     private final NettyServerConfig nettyServerConfig;
-
+    /**
+     * NameServer 定时任务执行线程池，默认定时执行两个任务：
+     *
+     *  任务1、每隔 10s 扫描 broker ,维护当前存活的Broker信息。
+     *  任务2、每隔 10s 打印KVConfig 信息。
+     *
+     *  一个线程，执行两个任务。
+     */
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl(
         "NSScheduledThread"));
     private final KVConfigManager kvConfigManager;
     private final RouteInfoManager routeInfoManager;
 
+    /**
+     * netty远程服务
+     */
     private RemotingServer remotingServer;
 
     private BrokerHousekeepingService brokerHousekeepingService;
@@ -73,17 +83,32 @@ public class NamesrvController {
         this.configuration.setStorePathFromConfig(this.namesrvConfig, "configStorePath");
     }
 
+    /**
+     * 初始化
+     * @return
+     */
     public boolean initialize() {
 
         this.kvConfigManager.load();
-
+        /**
+         * 该参数目前主要用于 NameServer 的默认业务线程池，
+         * 处理诸如 broker、producer,consume 与 NameServer 的所有交互命令。
+         */
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
-
+        /**
+         * 远程服务线程池
+         */
         this.remotingExecutor =
             Executors.newFixedThreadPool(nettyServerConfig.getServerWorkerThreads(), new ThreadFactoryImpl("RemotingExecutorThread_"));
 
+        /**
+         *
+         */
         this.registerProcessor();
 
+        /**
+         * 每10s，检查一下broker的存活状态。如果超过2分钟，没有心跳，则关闭连接。
+         */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -92,6 +117,9 @@ public class NamesrvController {
             }
         }, 5, 10, TimeUnit.SECONDS);
 
+        /**
+         * 打印键值对任务，每10分钟执行一次。
+         */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -100,6 +128,9 @@ public class NamesrvController {
             }
         }, 1, 10, TimeUnit.MINUTES);
 
+        /**
+         * 如果没有禁用SSL，则加载SslContext
+         */
         if (TlsSystemConfig.tlsMode != TlsMode.DISABLED) {
             // Register a listener to reload SslContext
             try {

@@ -24,11 +24,16 @@ import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.message.MessageType;
 
+/**
+ * 消息上下文
+ */
 public class SendMessageContext {
     private String producerGroup;
     private Message message;
     private MessageQueue mq;
+    //broker地址
     private String brokerAddr;
+    //client端地址
     private String bornHost;
     private CommunicationMode communicationMode;
     private SendResult sendResult;

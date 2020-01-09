@@ -1,0 +1,83 @@
+参考：https://zhuanlan.zhihu.com/p/59516998
+总结
+    总结来说，它就是【用来记录消息在CommitLog中偏移量的，便于Consumer快速定位消息】。
+
+    1：ReputMessageService不断从CommitLog中查询是否有新存储的消息；
+
+    2：如果有新消息，便通过Dispatcher通知ConsumeQueue；
+
+    3：ConsumeQueue收到通知后会将消息偏移量存储到自身的MappedFile中。
+
+特别注意：queueId也就是消费队列的文件名。
+
+    MessageQueue 对象，在各个端，根据需要创建的，queueId就是 从 0 到 最大，自动生成的。
+    故而，只要知道每个broker创建几个队列就可以了。
+
+    其中：写队列表示生产消息的队列，读队列：表示消费消息的几个队列。默认都是四个。
+
+0、简介
+    每个ConsumeQueue都有一个id，id 的值为0到TopicConfig配置的队列数量。
+    比如某个Topic的消费队列数量为4，那么四个ConsumeQueue的【id就分别为0、1、2、3】。
+
+    ConsumeQueue是不负责存储消息的，只是负责记录它所属Topic的消息在CommitLog中的偏移量，
+    这样当消费者从Broker拉取消息的时候，就可以快速根据偏移量定位到消息。
+
+
+
+1、存储consumequeue的结构
+    /home/store
+    /home/store/topic
+        每个topic下面对应着多个queue。
+
+2、consumequeue 的文件命名
+    每个cosumequeue文件的名称fileName，名字长度为20位，左边补零，剩余为起始偏移量；
+
+    比如00000000000000000000代表了第一个文件，起始偏移量为0，文件大小为600个字节，
+    （因为一条20个字节，每页限制30万条）
+    当第一个文件满之后创建的第二个文件的名字为00000000000006000000，起始偏移量为6000000，
+    以此类推，第三个文件名字为00000000000012000000，起始偏移量为12000000，
+    消息存储的时候会顺序写入文件，当文件满了，写入下一个文件。
+
+    我的总结：似乎是一个文件满了，才会持久化该文件，并创建下一个文件。
+
+3、存储的内容
+    总共20个字节
+    一个long：记录commitLog的offset，也就是消息的总的偏移量
+    一个int：记录某条消息的长度。
+    一个long：消息的tag。
+
+1、如何查找消费队列？？
+
+
+2、删除
+
+3、恢复ConsumeQueue内存数据（recover）
+
+
+4、ConsumeQueue#load
+    加载mappedFileQueue文件到内存 （也就是加载所有的映射文件。）
+    如果拓展文件可读，接着加载ConsumeQueueExt
+
+    加载步骤
+    1、MappedFileQueue.load()
+        1、读取并循环commitlog目录下所有的文件
+            /userhome/store/commitlog
+        2、创建MappedFile
+        3、加入缓存（CopyOnWriteArrayList）；
+
+    2、MappedFile#init，创建MappedFile细节
+        对每个文件，创建一个文件通道，并创建一个对应的内存映射文件。
+
+5、恢复ConsumeQueue内存数据（recover）
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,262 @@
+文章地址：https://blog.csdn.net/prestigeding/article/details/78888290
+rocketmq基础概念与部署 ：https://www.cnblogs.com/tudachui/p/10998984.html
+rocketmq 下载地址：http://rocketmq.apache.org/release_notes/
+NIO Buffer缓冲区的duplicate与slice区别 ：https://blog.csdn.net/qq_36951116/article/details/87180063
+
+
+官方中文文档：
+    http://ifeve.com/%E3%80%8Aapache-rocketmq%E7%94%A8%E6%88%B7%E6%8C%87%E5%8D%97%E3%80%8B%E5%AE%98%E6%96%B9%E6%96%87%E6%A1%A3/
+
+
+pageCache : https://my.oschina.net/u/3180962/blog/3064148
+
+一次Rpc请求对应的key ：Opaque ：是一个自增的值
+消息key：端口号+IP+offset
+索引key ： topic + 消息key
+
+
+总结：
+    Opaque ：请求id
+    broker group ：指代一个Master Broker及其Slave Broker组成的集合
+
+1、各个服务于nameserver的连接。
+    1、broker
+        NameServer 与 Broker 空闲时长，默认2分钟，在2分钟内 Nameserver 没有收到 Broker 的心跳包，则关闭该连接。
+
+2、VIP通道
+    本质来说，发送的时候，使用另外一个端口。默认的端口 - 2
+
+3、客户端的工作
+    封装请求命令，不同的命令使用code进行区分，然后发送命令。
+
+9、存储功能，kafka和rocket 对比：
+    https://blog.csdn.net/loulanyue_/article/details/89424013
+    这篇文章写的还是不错的。
+
+    rocketmq不是仅仅把partition改成了ConsumeQueue，原先kafka，里面partition存储的是整个消息，
+    但是现在ConsumeQueue里面是存储消息的存储地址，但是不存储消息了；
+
+    现在每个ConsumeQueue存储的是每个消息在commitlog这个文件的地址，但是消息存在于commitlog中
+    也就是【所有的消息体都写在了一个文件里面】，每个ConsumeQueue只是存储这个消息在commitlog中地址
+
+
+    存储对比
+        1、消息体存储的变化
+            那么我们先来看看kafka，假设partition有1000个，一个partition是顺序写一个文件，
+            总体上就是1000个文件的顺序写，是不是就变成了随机写，所以当partition增加到一定数目后，kafka性能就会下降。
+
+            而rocketmq是把消息都写到一个CommitLog文件中，所以相当于一个文件的顺序写;
+
+        2、为什么索引文件(ConsumeQueue)的增加对性能影响没有那么partition大？
+            (kafka也有索引文件，在这里只是想说明索引文件的增加跟partition增加的区别)
+            虽然rocketmq是把消息都写到一个CommitLog文件中，但是按照上面的实例会有1000个ConsumeQueue，
+
+            也就是一千个文件，那么为什么就没有把顺序写变成随机写，带来性能的下降呢？
+
+
+
+        3、首先就要介绍linux的pagecache
+            我们平常调用write或者fwrite的时候，数据还没有写到磁盘上，只是写到一个内核的缓存(pagecache)，
+            只有当我们主动调用flush的时候才会写到硬盘中。
+
+            或者需要回写的pagecache占总内存一定比例的时候或者一个应该回写的page超过一定时间还没有写磁盘的时候，
+            内核会将这些数据通过后台进程写到磁盘中(总结就是达到一定比例，或者多长时间还没有回写，会被内核自动回写)。
+
+
+            然后我们现在来看看为什么大量索引文件的顺序写没有像partition一样导致性能明显下降。
+            ConsumeQueue只存储了（CommitLog Offet + Size + Message Tag Hashcode），一共20个字节，
+            那么当commitlog定时任务刷盘之后，应该回写的pagecache的比例就会下降很多，
+            那么ConsumeQueue的部分可以不用刷盘，就相当于ConsumeQueue的内容会等待比较长的时间聚合批量写入，
+            而kafka每个partition都是存储的消息体，因为消息体都相对较大，基本在kb之上。
+
+
+            当一个partition刷盘的时候，应该回写的pagecache的比例降低的并不多，不能阻止其他partition的刷盘，
+            所以会大量存在多个partition同时刷盘的场景，变成随机写。
+            但是rocketmq消息都会写入一个commitLog，也就是顺序写。
+
+
+    总结如下：
+        1、consumerQueue消息格式大小固定（20字节），写入pagecache之后被触发刷盘频率相对较低。就是因为每次写入的消息小，造成他占用的pagecache少，主要占用方一旦被清理，那么他就可以不用清理了;
+        2、kafka中多partition会存在随机写的可能性，partition之间刷盘的冲撞率会高，但是rocketmq中commitLog都是顺序写。
+
+
+
+
+
+10、为什么要用消息队列。
+    即，应用场景是什么，也就是用了有什么好处
+
+     解耦
+         多应用间通过消息队列对同一消息进行处理，避免调用接口失败导致整个过程失败
+
+        我理解的解耦：
+            就像接口一样，面向接口编程。注册中心也有这个意思。
+            我们在消费的时候，不直接面向某个服务，而是针对消息队列进行消费。
+
+     异步
+         多应用对消息队列中同一消息进行处理，应用间并发处理消息，相比串行处理，减少处理时间
+
+        我理解的异步：
+            直接调用接口，只是串行去调用。
+            使用消息队列，可以使用多个消费者，同时消费数据。
+
+     削峰／限流
+         避免流量过大导致应用系统挂掉的情况。
+
+         我的理解：
+            这个很好理解：消息队列本来就是分布式，高可用的。
+
+11、使用消息队列需要注意什么？
+    系统复杂性增加
+
+    如何保证消息队列是高可用，即做到集群高可用
+
+    如何保证消费的可靠性传输，即不丢消息
+
+    如何保证消息不被重复消费，即保证消费的幂等性
+
+    如何保证消息的顺序性，即保证数据的逻辑正确性
+
+12、高可靠并发读写服务
+    所有发往broker的消息，有同步刷盘和异步刷盘机制
+
+    同步刷盘、异步刷盘
+        同步刷盘时，消息写入物理文件才会返回成功，因此非常可靠；
+        异步刷盘时，只有机器宕机，才会产生消息丢失，broker挂掉可能会发生，但是机器宕机崩溃是很少发生的，除非突然断电。
+
+13、负载均衡
+    Broker上存Topic信息，Topic由多个队列组成，
+    队列会平均分散在多个Broker上，
+    而Producer的发送机制保证消息尽量平均分布到所有队列中，最终效果就是所有消息都平均落在每个Broker上
+
+14、高可用
+    集群部署时一般都为主备，Broker名相同的一组Master/Slave Broker，
+    其中包含一个Master Broker（Broker Id为0）和0~N个Slave Broker（Broker Id不为0），
+    备机实时从主机同步消息，如果其中一个主机宕机，备机提供消费服务，但不提供写服务。
+
+=====================================Producer
+15、Producer
+    我的总结：消息发送的时候，不是轮询集群中所有的broker，而是哪些broker中，有该topic，轮询哪些broker。
+
+    Producer启动时，也需要指定Namesrv的地址，从Namesrv集群中选一台Master建立长连接，
+    生产者每30秒从Namesrv获取Topic跟Broker的映射关系，更新到本地内存中。
+    再跟Topic涉及的所有Broker建立长连接
+
+    生产者发送时，会自动轮询当前所有可发送的broker，
+    一条消息发送成功，下次换另外一个broker发送，以达到消息平均落到所有的broker上。
+
+    假如某个Broker宕机，意味生产者最长需要30秒才能感知到。在这期间会向宕机的Broker发送消息。
+    当一条消息发送到某个Broker失败后，会往该broker自动再重发2次，假如还是发送失败，则抛出发送失败异常。
+    业务捕获异常，重新发送即可。客户端里会自动轮询另外一个Broker重新发送，这个对于用户是透明的
+
+    消息发送方式分为，同步发送，异步发送，单向发送
+===========================================Consumer
+16、Consumer
+    消费者启动时需要指定Namesrv地址，与其中一个Namesrv建立长连接。
+    消费者每隔30秒从nameserver获取所有topic的最新队列情况
+
+    Consumer跟Broker是长连接，会每隔30秒发心跳信息到Broker。
+    Broker端每10秒检查一次当前存活的Consumer，若发现某个Consumer 2分钟内没有心跳，就断开与该Consumer的连接，
+    并且向该消费 组的其他实例发送通知，触发该消费者集群的负载均衡。
+
+    消费者得到master宕机通知后，转向slave消费（重定向，对于2次开发者透明），
+    但是slave不能保证master的消息100%都同步过来了，因此会有少量的消息丢失。
+    但是消息最终不会丢的，一旦master恢复，未同步过去的消息会被消费掉。
+
+    消费分为集群消费和广播消费
+
+==========================================Topic+Queue
+17、Topic+Queue
+    如果各Master Broker有Slave Broker，Slave Broker中的结构和其对应的Master Broker完全相同。
+
+    Topic是逻辑概念，对于RocketMQ，一个Topic可以分布在各个Broker上，
+    【把一个Topic分布在一个Broker上的子集定义为一个【Topic分片】，其实就是在某一broke上一个topic的部分数据
+
+    Queue 存在的意义：
+        每个Topic分片等分的Queue的数量可以不同，由用户在创建Topic时指定, 是消费负载均衡过程中资源分配的基本单元.
+
+
+18、Topic 的创建过程：
+    创建topic需要指定的参数，
+
+        -b 指定broker上创建topic：单个Broker上创建topic
+        -c 指定cluster创建topic：broker集群上创建topic
+        -n 指定namesrv地址，
+            cluster模式下必须从namesrv获取broker地址，
+            支持cluster模式下创建topic和支持broker模式下创建topic
+        -t topic的名字标志
+        -r/w 读写队列的个数，建议相等
+        -o 待研究不确定是不是保证全局有序消息的配置
+
+19、存储持久化
+   消息队列的存储选型：
+
+   分布式KV存储，文件系统（目前业界较为常用的几款产品RocketMQ/Kafka/RabbitMQ 均采用的是消息刷盘至
+   所部署虚拟机/物理机的文件系统来做持久化，关系性DB(ActiveMQ)
+
+   从高可靠，高效率，中间件减少对第三方的依赖考虑， 文件系统>分布式KV存储>关系型数据库DB
+
+
+   对比kafka的存储结构：
+       每个Topic有多个partition(queue),kafka的每个partition都是一个【独立的物理文件】, 消息直接从里面读写
+
+   RocketMQ存储的特点：
+       1.Broker单个实例下所有的队列共用一个日志数据文件（即为CommitLog）来存储
+
+       2.consumerQueue 是个消费的逻辑队列，保存了数据在commit log中的offset
+
+       3.消费读取数据，需要先读取consumerQueue，再读取commit log，消息主体都是通过CommitLog来进行读写.
+
+    缺点：
+        顺序写，随即读
+
+   克服缺点：
+        由于Consume Queue存储数据量极少, 而且是顺序读,
+        在PAGECACHE预读作用下, Consume Queue的读性能几乎与内存一致, 即使堆积情况下. 所以可认为Consume Queue完全不会阻碍读性能
+
+
+10、小结
+   RocketMQ可以严格的保证消息有序。但这个顺序，不是全局顺序，只是分区（queue）顺序。要全局顺序只能一个分区
+
+   RocketMQ不保证消息不重复，如果你的业务需要保证严格的不重复消息，需要你自己在业务端去重
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

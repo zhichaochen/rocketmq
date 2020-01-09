@@ -25,6 +25,11 @@ import org.apache.rocketmq.remoting.CommandCustomHeader;
 import org.apache.rocketmq.remoting.annotation.CFNotNull;
 import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 
+/**
+ * topic请求头
+ *
+ * 其中CF（consume field） ：表示自定义字段
+ */
 public class CreateTopicRequestHeader implements CommandCustomHeader {
     @CFNotNull
     private String topic;

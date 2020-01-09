@@ -33,10 +33,18 @@ import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
+/**
+ * 集群模式下，Offset维护在服务器端。
+ */
 public class ConsumerOffsetManager extends ConfigManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     private static final String TOPIC_GROUP_SEPARATOR = "@";
-
+    /**
+     * 偏移量缓存
+     * 其中key ：topic@group
+     * value：ConcurrentMap
+     *      其中：key：queueId，value：offset
+     */
     private ConcurrentMap<String/* topic@group */, ConcurrentMap<Integer, Long>> offsetTable =
         new ConcurrentHashMap<String, ConcurrentMap<Integer, Long>>(512);
 
@@ -82,13 +90,21 @@ public class ConsumerOffsetManager extends ConfigManager {
         return result;
     }
 
+    /**
+     * 该消费者组中，有哪些topic
+     *
+     * @param group
+     * @return
+     */
     public Set<String> whichTopicByConsumer(final String group) {
         Set<String> topics = new HashSet<String>();
 
         Iterator<Entry<String, ConcurrentMap<Integer, Long>>> it = this.offsetTable.entrySet().iterator();
         while (it.hasNext()) {
             Entry<String, ConcurrentMap<Integer, Long>> next = it.next();
+            //topic所属组
             String topicAtGroup = next.getKey();
+            //使用@进行分割，其中第一个值，是group，第二个值是：topic。
             String[] arrays = topicAtGroup.split(TOPIC_GROUP_SEPARATOR);
             if (arrays.length == 2) {
                 if (group.equals(arrays[1])) {
@@ -100,6 +116,11 @@ public class ConsumerOffsetManager extends ConfigManager {
         return topics;
     }
 
+    /**
+     * 哪些消费者组， 订阅了改topic
+     * @param topic
+     * @return
+     */
     public Set<String> whichGroupByTopic(final String topic) {
         Set<String> groups = new HashSet<String>();
 
@@ -118,6 +139,14 @@ public class ConsumerOffsetManager extends ConfigManager {
         return groups;
     }
 
+    /**
+     * 提交 Offset。
+     * @param clientHost ：消费端地址
+     * @param group ：消费者组
+     * @param topic ：topic
+     * @param queueId ：队列id
+     * @param offset ：
+     */
     public void commitOffset(final String clientHost, final String group, final String topic, final int queueId,
         final long offset) {
         // topic@group
@@ -128,10 +157,13 @@ public class ConsumerOffsetManager extends ConfigManager {
     private void commitOffset(final String clientHost, final String key, final int queueId, final long offset) {
         ConcurrentMap<Integer, Long> map = this.offsetTable.get(key);
         if (null == map) {
+            //创建map，其中key：queueId，value：offset
             map = new ConcurrentHashMap<Integer, Long>(32);
             map.put(queueId, offset);
+            //放置
             this.offsetTable.put(key, map);
         } else {
+            //已经存在，直接设置，其中，有可能是其他的queueId，也有可能是同一个queueId。
             Long storeOffset = map.put(queueId, offset);
             if (storeOffset != null && offset < storeOffset) {
                 log.warn("[NOTIFYME]update consumer offset less than store. clientHost={}, key={}, queueId={}, requestOffset={}, storeOffset={}", clientHost, key, queueId, offset, storeOffset);
@@ -139,9 +171,21 @@ public class ConsumerOffsetManager extends ConfigManager {
         }
     }
 
+    /**
+     * 通过topic 和 queueId，查询 queue的 消费的 offset
+     * 从缓存中获取
+     *
+     * @param group
+     * @param topic
+     * @param queueId
+     * @return
+     */
     public long queryOffset(final String group, final String topic, final int queueId) {
         // topic@group
         String key = topic + TOPIC_GROUP_SEPARATOR + group;
+        /**
+         * key ：queueId，value：offset
+         */
         ConcurrentMap<Integer, Long> map = this.offsetTable.get(key);
         if (null != map) {
             Long offset = map.get(queueId);
@@ -152,6 +196,10 @@ public class ConsumerOffsetManager extends ConfigManager {
         return -1;
     }
 
+    /**
+     * 编码
+     * @return
+     */
     public String encode() {
         return this.encode(false);
     }
@@ -171,9 +219,15 @@ public class ConsumerOffsetManager extends ConfigManager {
         }
     }
 
+    /**
+     * 进行编码，其中prettyFormat，表示是否需要美化。
+     * @param prettyFormat
+     * @return
+     */
     public String encode(final boolean prettyFormat) {
         return RemotingSerializable.toJson(this, prettyFormat);
     }
+
 
     public ConcurrentMap<String, ConcurrentMap<Integer, Long>> getOffsetTable() {
         return offsetTable;
@@ -183,10 +237,19 @@ public class ConsumerOffsetManager extends ConfigManager {
         this.offsetTable = offsetTable;
     }
 
+    /**
+     * 查询在所有的组中，某个topic的 下，偏移量最小的queue
+     *     多个消费者组可能包含该topic，故而返回多个最小便宜量。
+     *
+     * @param topic
+     * @param filterGroups
+     * @return
+     */
     public Map<Integer, Long> queryMinOffsetInAllGroup(final String topic, final String filterGroups) {
 
         Map<Integer, Long> queueMinOffset = new HashMap<Integer, Long>();
         Set<String> topicGroups = this.offsetTable.keySet();
+
         if (!UtilAll.isBlank(filterGroups)) {
             for (String group : filterGroups.split(",")) {
                 Iterator<String> it = topicGroups.iterator();
@@ -204,6 +267,7 @@ public class ConsumerOffsetManager extends ConfigManager {
             if (topic.equals(topicGroupArr[0])) {
                 for (Entry<Integer, Long> entry : offSetEntry.getValue().entrySet()) {
                     long minOffset = this.brokerController.getMessageStore().getMinOffsetInQueue(topic, entry.getKey());
+
                     if (entry.getValue() >= minOffset) {
                         Long offset = queueMinOffset.get(entry.getKey());
                         if (offset == null) {

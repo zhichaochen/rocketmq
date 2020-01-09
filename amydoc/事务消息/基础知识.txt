@@ -1,0 +1,166 @@
+参考；https://blog.csdn.net/prestigeding/article/details/81259646
+
+总结：
+    1、先发送一条prepare消息，写入一个 half topic，不会被消费。
+    2、处理本地事务。
+    3、根据本地事务的状态，发送commit or rollback or onknown 请求。
+    4、onknown 的情况的话，通过broker端的状态回查来确定 到底是 commit 还是 rollback
+
+1、事务消息实现思想
+    事务消息的实现基于两阶段提交和【定时任务的【事务状态回查】来决定最终是提交还是回滚。
+    2PC：二阶段提交（2 阶段 commit）
+
+    阶段1：prepare阶段
+        发送并保存消息。将消息保存在一个特殊的topic中。
+        该消息不会被消费，因为该topic 是一个内部topic，没有消费者订阅。
+
+    阶段2；commit阶段
+        将消息内容从特殊的topic中取出，重新写入原来的topic中。该消息会被订阅的主题消费。
+
+    消息回查：
+
+2、用到的两个topic
+    RMQ_SYS_TRANS_HALF_TOPIC：prepare消息的主题，事务消息首先先进入到该主题。
+    RMQ_SYS_TRANS_OP_HALF_TOPIC：
+        当消息服务器收到事务消息的提交或回滚请求后，会将消息存储在该主题下。
+        为未处理的事务进行回查提供查找依据。
+
+
+    表示消息已经被处理过。
+
+3、如何处理本地事务
+    参考：TransactionListenerImpl
+    首先实现TransactionListener
+
+    executeLocalTransaction方法：用于执行本地的方法，根据情况返回执行状态。
+    checkLocalTransaction方法：定时检查事务状态
+        如果执行本地事务返回了UNKNOWN状态，则会调用本地方法。不过也推荐返回UNKNOWN。
+
+        通过回查该方法，再确定执行commit or rollback。
+
+4、EndTransactionProcessor
+    1、提交
+        prepare阶段
+            先将消息发送到RMQ_SYS_TRANS_HALF_TOPIC 主题。将queueId 设置成0
+            并记录原来的 topic and queueId
+
+            存入磁盘：
+        commit
+            1、将消息topic and queueId 修改为原来的topic and queueId。
+                并存入磁盘
+
+            2、（删除prepare消息）将消息存入磁盘，RMQ_SYS_TRANS_OP_HALF_TOPIC topic下
+
+    2、回滚
+        回滚和提交的唯一不同是：少了commit阶段的 第一步。
+
+4.1、消息删除
+    prepare message 并不会真正的删除，而是放入RMQ_SYS_TRANS_OP_HALF_TOPIC
+
+
+5、回查事务状态
+    broker端开启一个线程，去client端，调用checkLocalTransaction方法，检测事务状态。
+
+    TransactionalMessageCheckService 线程定时去检测
+    TransactionalMessageServiceImpl#check：回查流程
+    AbstractTransactionalMessageCheckListener#sendCheckMessage : 发送回查请求
+
+    大体逻辑是
+        RMQ_SYS_TRANS_OP_HALF_TOPIC ：表示已经处理了的事务消息。
+        RMQ_SYS_TRANS_HALF_TOPIC ：表示prepare阶段的事务消息，尚未处理。
+
+        通过 RMQ_SYS_TRANS_OP_HALF_TOPIC 的offset 和 RMQ_SYS_TRANS_HALF_TOPIC的offset
+        对比：half 比 op 多出来的那部分 offset，就是需要去状态回查的。
+        因为事务消息，无论commit and rollback，都会将消息写入 OP 的topic中。
+
+    DefaultMQProducerImpl#checkTransactionState
+        client 端 处理broke端发送的，查询事务状态的请求。
+
+        核心逻辑是：开启一个线程，执行checkLocalTransaction方法，检查本地事务
+        将本地事务状态响应给broker端。
+
+        EndTransactionProcessor ：根据状态，进行处理。
+
+7、总体流程
+    1、client 同步发送prepare message
+        将message设置事务状态
+    2、在broker端收到消息
+        SendMessageProcessor#sendMessage
+
+        1、如果是事务消息，则修改topic为RMQ_SYS_TRANS_HALF_TOPIC，修改queueId 为 0。
+        2、并记录修改之前的信息在 half messagequeue中。
+        3、将消息写入磁盘。
+
+    3、执行本地事务（自己的业务流程）
+        当prepare返回结果后。
+
+        1、prepare消息发送成功
+            执行本地事务（也就是调用我们自己的业务逻辑，根据情况，返回本地事务的三种情况。）
+            transactionListener.executeLocalTransaction(msg, arg);
+
+            执行本地事务，返回事务状态，默认的状态是：LocalTransactionState.UNKNOW
+
+        2、prepare消息发送失败（包括超时，slave不可用等失败状态）
+            设置本地事务状态为rollback
+            LocalTransactionState.ROLLBACK_MESSAGE
+
+
+        我们使用消息队列发送消息嘛，当我们自己的项目有报错，需要回滚的时候，
+        且发送的消息也需要回滚，这个时候就用到了事务消息。
+
+        执行我们本地的代码：
+        根据我们本地代码的执行情况，rocketmq client执行第二阶段的请求，commit or rollback
+
+        本地事务有三种情况：
+            1、COMMIT_MESSAGE ：提交事务。
+            2、ROLLBACK_MESSAGE：回滚事务。
+            3、UNKNOW：
+
+
+
+    4、client发送结束事务。
+        DefaultMQProducerImpl#endTransaction
+
+        根据本地事务的执行情况，发送二阶段请求，提交或回滚事务。
+
+        根据本地事务状态，设置不同的请求头，发送请求。
+        requestHeader.setCommitOrRollback
+
+    5、broker收到结束事务请求
+        EndTransactionProcessor
+
+        commit：
+            1、将消息topic and queueId 修改为原来的topic and queueId。
+                并写入磁盘，（让事务消息，能被消费。）
+
+            2、（删除prepare消息）将消息存入磁盘，RMQ_SYS_TRANS_OP_HALF_TOPIC topic下
+
+        rollback：
+            （删除prepare消息）将消息存入磁盘，RMQ_SYS_TRANS_OP_HALF_TOPIC topic下
+
+        unknown：
+            不做任何操作。（由事务状态检测线程处理。）
+
+
+    6、事务状态检测
+        参考如上分析
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

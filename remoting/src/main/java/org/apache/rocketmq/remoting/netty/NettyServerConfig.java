@@ -16,17 +16,38 @@
  */
 package org.apache.rocketmq.remoting.netty;
 
+/**
+ * nameserver的netty服务配置
+ */
 public class NettyServerConfig implements Cloneable {
+    //服务端的端口号。
     private int listenPort = 8888;
+
+    //该参数目前主要用于 NameServer 的默认业务线程池，处理诸如 broker、producer,consume 与 NameServer 的所有交互命令。
     private int serverWorkerThreads = 8;
+
+    //
     private int serverCallbackExecutorThreads = 0;
+
+    //Netty IO 线程个数，Selector 所在的线程个数，也就主从 Reactor 模型中的从 Reactor 线程数量 。
     private int serverSelectorThreads = 3;
+
+    //服务端 oneWay(单向执行) 的信号量（并发度）
     private int serverOnewaySemaphoreValue = 256;
+
+    //异步调用的信号量（并发度）。
     private int serverAsyncSemaphoreValue = 64;
+
+    // 通道空闲时间，默认120S, 通过Netty的IdleStateHandler实现
     private int serverChannelMaxIdleTimeSeconds = 120;
 
+    // socket发送缓存区大小
     private int serverSocketSndBufSize = NettySystemConfig.socketSndbufSize;
+
+    // socket接收缓存区大小
     private int serverSocketRcvBufSize = NettySystemConfig.socketRcvbufSize;
+
+    // 是否使用PooledByteBuf(可重用，缓存ByteBuf)
     private boolean serverPooledByteBufAllocatorEnable = true;
 
     /**

@@ -22,14 +22,29 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 
 import java.util.HashMap;
 
+/**
+ * 等待，通知对象
+ * 没有工作的时候休息，有工作的时候，唤醒线程起来工作。
+ */
 public class WaitNotifyObject {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
-
+    /**
+     * 缓存所有正在等待的线程
+     * 其中：key：线程Id，value：hasNotified
+     */
     protected final HashMap<Long/* thread id */, Boolean/* notified */> waitingThreadTable =
         new HashMap<Long, Boolean>(16);
 
+    /**
+     * 是否是已通知状态
+     * true：表示开始工作
+     * false ：表示当前线程正在等待
+     */
     protected volatile boolean hasNotified = false;
 
+    /**
+     * 唤醒工作线程
+     */
     public void wakeup() {
         synchronized (this) {
             if (!this.hasNotified) {
@@ -39,8 +54,14 @@ public class WaitNotifyObject {
         }
     }
 
+    /**
+     * 让正在运行的线程等待一会儿
+     *
+     * @param interval
+     */
     protected void waitForRunning(long interval) {
         synchronized (this) {
+            //改变hasNotified状态为false
             if (this.hasNotified) {
                 this.hasNotified = false;
                 this.onWaitEnd();
@@ -48,6 +69,7 @@ public class WaitNotifyObject {
             }
 
             try {
+                //当前线程等待
                 this.wait(interval);
             } catch (InterruptedException e) {
                 log.error("Interrupted", e);
@@ -61,6 +83,10 @@ public class WaitNotifyObject {
     protected void onWaitEnd() {
     }
 
+    /**
+     * 唤醒缓存的所有线程
+     * handleHA(),调用了该方法。
+     */
     public void wakeupAll() {
         synchronized (this) {
             boolean needNotify = false;
@@ -76,9 +102,22 @@ public class WaitNotifyObject {
         }
     }
 
+    /**
+     * 当前线程wait一会儿，并加入缓存
+     * 其实加入的是WriteSocketService。
+     *
+     * 目前来看，只有WriteSocketService用到了该方法，
+     * 当没有数据可同步的时候，加入缓存，表示同步线程正在休息。
+     *
+     * @param interval
+     */
     public void allWaitForRunning(long interval) {
+        //当前线程
         long currentThreadId = Thread.currentThread().getId();
         synchronized (this) {
+            /**
+             * 缓存中已经存在，则更改状态。
+             */
             Boolean notified = this.waitingThreadTable.get(currentThreadId);
             if (notified != null && notified) {
                 this.waitingThreadTable.put(currentThreadId, false);
@@ -86,6 +125,9 @@ public class WaitNotifyObject {
                 return;
             }
 
+            /**
+             * 缓存中不存在，则等待，并加入缓存。
+             */
             try {
                 this.wait(interval);
             } catch (InterruptedException e) {
@@ -97,6 +139,9 @@ public class WaitNotifyObject {
         }
     }
 
+    /**
+     * 同步完成后，从缓存移除当前正在等待的线程。
+     */
     public void removeFromWaitingThreadTable() {
         long currentThreadId = Thread.currentThread().getId();
         synchronized (this) {
